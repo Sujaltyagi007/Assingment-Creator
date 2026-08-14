@@ -1,0 +1,48 @@
+import { GlobalSettings } from '@/lib/types'
+
+type Props = {
+    onUpdateSettings: (settings: Partial<GlobalSettings>) => void;
+    settings: GlobalSettings;
+}
+
+export const TypographyCard = ({ onUpdateSettings, settings }: Props) => {
+    return (
+        <div className="rounded-xl bg-[#14141d] border border-[#232332] p-3 flex flex-col gap-3">
+            <span className="font-bold text-zinc-400 text-[11px] uppercase tracking-wider">
+                TYPOGRAPHY
+            </span>
+            <div className="flex flex-col gap-1">
+                <span className="font-semibold text-zinc-300 text-[10px]">Font Scale</span>
+                <input type="range" min={16} max={48} value={settings.fontSize}
+                    onChange={(e) => onUpdateSettings({ fontSize: Number(e.target.value) })}
+                    className="modern-range"
+                />
+            </div>
+
+            <div className="flex flex-col gap-1">
+                <span className="font-semibold text-zinc-300 text-[10px]">Word Spacing</span>
+                <input type="range" min={0.5} max={2.5} step={0.1}
+                    value={settings.wordSpacing}
+                    onChange={(e) => onUpdateSettings({ wordSpacing: Number(e.target.value) })}
+                    className="modern-range"
+                />
+            </div>
+
+            {/* Line Height */}
+            <div className="flex flex-col gap-1">
+                <span className="font-semibold text-zinc-300 text-[10px]">Line Height</span>
+                <input
+                    type="range"
+                    min={1.0}
+                    max={3.0}
+                    step={0.1}
+                    value={settings.lineSpacing}
+                    onChange={(e) => onUpdateSettings({ lineSpacing: Number(e.target.value) })}
+                    className="modern-range"
+                />
+            </div>
+        </div>
+    )
+}
+
+export default TypographyCard

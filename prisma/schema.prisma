@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              Int          @id @default(autoincrement())
+  token           String       @unique
+  email           String       @unique
+  name            String?
+  password        String?
+  isAdmin         Boolean      @default(false)
+  isGuest         Boolean      @default(true)
+  downloadCredits Int          @default(10)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  downloads       Downloads[]
+}
+
+
+model Downloads {
+  id        Int      @id @default(autoincrement())
+  fileName  String   @default("") @map("file_name")
+  fileType  String   @default("pdf") @map("file_type")
+  fileSize  Int?     @map("file_size")
+  pageCount Int?     @default(1) @map("page_count")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
