@@ -19,8 +19,8 @@ function bbcodeToHtml(text: string): string {
         .replace(/\[\/i\]/g, "</em>")
         .replace(/\[u\]/g, "<u>")
         .replace(/\[\/u\]/g, "</u>")
-        .replace(/\[h\]/g, '<span style="background-color: #fef08a; color: #000000;">')
-        .replace(/\[\/h\]/g, "</span>")
+        .replace(/\[h\]/g, '<mark style="background-color: #fef08a; color: #000000; border-radius: 2px; padding: 0 2px;">')
+        .replace(/\[\/h\]/g, "</mark>")
         .replace(/\[s\]/g, "<s>")
         .replace(/\[\/s\]/g, "</s>")
         .replace(/\[color=([^\]]+)\]/g, '<span style="color: $1">')
@@ -45,19 +45,34 @@ function htmlToBbcode(html: string): string {
             });
 
             const tag = el.tagName.toLowerCase();
-            if (tag === "strong" || tag === "b") return `[b]${text}[/b]`;
-            if (tag === "em" || tag === "i") return `[i]${text}[/i]`;
-            if (tag === "u") return `[u]${text}[/u]`;
-            if (tag === "mark" || (tag === "span" && el.style.backgroundColor && el.style.backgroundColor !== "transparent" && el.style.backgroundColor !== "rgba(0, 0, 0, 0)")) return `[h]${text}[/h]`;
-            if (tag === "s" || tag === "strike" || tag === "del") return `[s]${text}[/s]`;
-            if (tag === "span" && el.style.color) {
-                return `[color=${el.style.color}]${text}[/color]`;
+            const bg = el.style.backgroundColor || el.style.background || el.getAttribute("bgcolor");
+            const hasBg = bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "none";
+            const textColor = el.style.color || el.getAttribute("color");
+
+            let formattedText = text;
+            if (tag === "strong" || tag === "b" || el.style.fontWeight === "bold" || parseInt(el.style.fontWeight, 10) >= 700) {
+                formattedText = `[b]${formattedText}[/b]`;
+            }
+            if (tag === "em" || tag === "i" || el.style.fontStyle === "italic") {
+                formattedText = `[i]${formattedText}[/i]`;
+            }
+            if (tag === "u" || el.style.textDecoration?.includes("underline") || el.style.textDecorationLine?.includes("underline")) {
+                formattedText = `[u]${formattedText}[/u]`;
+            }
+            if (tag === "s" || tag === "strike" || tag === "del" || el.style.textDecoration?.includes("line-through") || el.style.textDecorationLine?.includes("line-through")) {
+                formattedText = `[s]${formattedText}[/s]`;
+            }
+            if (tag === "mark" || hasBg) {
+                formattedText = `[h]${formattedText}[/h]`;
+            }
+            if (textColor && !hasBg) {
+                formattedText = `[color=${textColor}]${formattedText}[/color]`;
             }
             if (tag === "br") return "\n";
             if (tag === "div" || tag === "p") {
-                return (text ? "\n" + text : "");
+                return (formattedText ? "\n" + formattedText : "");
             }
-            return text;
+            return formattedText;
         }
         return "";
     };
@@ -111,14 +126,15 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
     };
 
     return (
-        <div className="flex-1 flex flex-col rounded-2xl bg-[#13131a] border border-[#232330] h-full p-4 shadow-inner min-h-87.5 relative pb-12 ">
+        <div className="flex-1 flex flex-col rounded-2xl bg-zinc-50 border border-zinc-200 dark:bg-[#13131a] dark:border-[#232330] h-full p-4 shadow-inner min-h-87.5 relative pb-12 transition-colors duration-200">
             <div ref={editableRef} contentEditable
                 onInput={handleInput}
                 onSelect={handleSelect}
                 onKeyUp={handleSelect}
                 onMouseUp={handleSelect}
+                onTouchEnd={handleSelect}
                 spellCheck={autoCorrect}
-                className="w-full flex-1 bg-transparent text-zinc-100 placeholder-zinc-600 focus:outline-none resize-none font-sans text-base leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none" style={{ minHeight: "150px" }}
+                className="w-full flex-1 bg-transparent text-zinc-900 placeholder-zinc-400 dark:text-zinc-100 dark:placeholder-zinc-600 focus:outline-none resize-none font-sans text-base leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none" style={{ minHeight: "150px" }}
             />
 
             <div className="absolute bottom-3 left-4 flex items-center">
@@ -133,7 +149,7 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                     type="button"
                     title="Upload SVG Image"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800/60 hover:bg-zinc-700/80 border border-zinc-700/50 text-zinc-300 hover:text-white transition-all text-xs font-semibold cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-200/80 hover:bg-zinc-300 border border-zinc-300 text-zinc-700 hover:text-zinc-900 dark:bg-zinc-800/60 dark:hover:bg-zinc-700/80 dark:border-zinc-700/50 dark:text-zinc-300 dark:hover:text-white transition-all text-xs font-semibold cursor-pointer"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />

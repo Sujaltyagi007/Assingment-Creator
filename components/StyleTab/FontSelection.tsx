@@ -37,7 +37,7 @@ export const FontSelection = ({ onUpdateSettings, settings }: Props) => {
     const isUploaded = isCustom && !(settings.font in fontsMap);
 
     return (
-        <div className="rounded-xl bg-[#14141d] border border-[#232332] p-2 flex gap-2">
+        <div className="rounded-xl bg-zinc-50 border border-zinc-200 dark:bg-[#14141d] dark:border-[#232332] p-2 flex gap-2 transition-colors duration-200">
             <div className=" size-16 ">
                 <img src={HandwritingIcon.src} alt="Handwriting" className="w-full h-full" />
             </div>
@@ -49,16 +49,16 @@ export const FontSelection = ({ onUpdateSettings, settings }: Props) => {
                     if (val === "custom") { onUpdateSettings({ fontSource: "custom" }); }
                     else { onUpdateSettings({ font: val as FontKey, fontSource: "builtin" }) }
                 }}>
-                    <SelectTrigger className="w-full min-w-48 rounded-lg bg-[#0b0b10] border border-[#272738] text-zinc-200 focus:outline-none focus:border-primary text-xs cursor-pointer h-8 justify-between">
+                    <SelectTrigger className="w-full min-w-48 rounded-lg bg-white border border-zinc-300 text-zinc-800 dark:bg-[#0b0b10] dark:border-[#272738] dark:text-zinc-200 focus:outline-none focus:border-primary text-xs cursor-pointer h-8 justify-between">
                         <SelectValue placeholder="Select a font" />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0b0b10] transform -translate-x-1 border border-[#272738] text-zinc-200 text-xs" alignItemWithTrigger >
+                    <SelectContent className="bg-white border border-zinc-200 text-zinc-800 dark:bg-[#0b0b10] transform -translate-x-1 dark:border-[#272738] dark:text-zinc-200 text-xs" alignItemWithTrigger >
                         {Object.keys(fontsMap).map((fontName) => (
-                            <SelectItem key={fontName} value={fontName} className="hover:bg-primary/40 focus:bg-primary/70 text-zinc-200 cursor-pointer">
+                            <SelectItem key={fontName} value={fontName} className="hover:bg-primary/20 focus:bg-primary/20 text-zinc-800 dark:text-zinc-200 cursor-pointer">
                                 {fontName}
                             </SelectItem>
                         ))}
-                        <SelectItem value="custom" className="hover:bg-primary/10 focus:bg-primary/70 text-white  cursor-pointer">
+                        <SelectItem value="custom" className="hover:bg-primary/10 focus:bg-primary/70 text-zinc-800 dark:text-white cursor-pointer">
                             ★ Custom Font...
                         </SelectItem>
                     </SelectContent>
@@ -67,12 +67,12 @@ export const FontSelection = ({ onUpdateSettings, settings }: Props) => {
                     <div className="flex flex-col gap-1.5 mt-1">
                         <div className="flex items-center gap-2">
                             <button type="button" disabled={isLoading} onClick={() => fileInputRef.current?.click()}
-                                className="flex-1 rounded-lg border border-dashed border-[#353550] bg-[#0b0b10] px-2.5 py-1.5 text-[10px] text-zinc-400 hover:border-primary hover:text-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-left font-medium">
+                                className="flex-1 rounded-lg border border-dashed border-zinc-300 dark:border-[#353550] bg-white dark:bg-[#0b0b10] px-2.5 py-1.5 text-[10px] text-zinc-600 dark:text-zinc-400 hover:border-primary hover:text-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-left font-medium">
                                 {isLoading ? "Loading…" : isUploaded ? `✓ ${settings.font}` : "Upload font (.ttf/.otf/.woff)"}
                             </button>
                             {isUploaded && (
                                 <button type="button" onClick={() => onUpdateSettings({ font: "Caveat", fontSource: "builtin" })}
-                                    className="text-zinc-500 hover:text-zinc-200 text-[10px] px-1.5 transition-colors"
+                                    className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 text-[10px] px-1.5 transition-colors"
                                     title="Reset to default font">
                                     ✕
                                 </button>
@@ -85,7 +85,7 @@ export const FontSelection = ({ onUpdateSettings, settings }: Props) => {
                             onChange={handleFontUpload}
                             className="hidden"
                         />
-                        {error && <p className="text-[9px] text-red-400">{error}</p>}
+                        {error && <p className="text-[9px] text-red-500">{error}</p>}
                     </div>
                 )}
             </div>

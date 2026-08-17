@@ -24,11 +24,10 @@ export function useFormatText() {
         while (node && node !== textareaRef.current) {
             if (node.nodeType === Node.ELEMENT_NODE) {
                 const el = node as HTMLElement;
+                const bg = el.style.backgroundColor || el.style.background || el.getAttribute("bgcolor");
                 if (
                     el.tagName.toLowerCase() === "mark" ||
-                    (el.style.backgroundColor &&
-                     el.style.backgroundColor !== "transparent" &&
-                     el.style.backgroundColor !== "rgba(0, 0, 0, 0)")
+                    (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "none")
                 ) {
                     return true;
                 }
@@ -74,16 +73,15 @@ export function useFormatText() {
             if (isCurrentlyHighlighted) {
                 try {
                     document.execCommand("hiliteColor", false, "transparent");
-                } catch (e) {
+                } catch {
                     document.execCommand("backColor", false, "transparent");
                 }
             } else {
                 try {
                     document.execCommand("hiliteColor", false, "#fef08a");
-                } catch (e) {
+                } catch {
                     document.execCommand("backColor", false, "#fef08a");
                 }
-                document.execCommand("foreColor", false, "#000000");
             }
         } else if (tag === "color") {
             document.execCommand("foreColor", false, value);

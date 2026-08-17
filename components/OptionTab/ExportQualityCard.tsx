@@ -41,12 +41,12 @@ export const ExportQualityCard = ({ settings, pageCount, onUpdateSettings, onExp
   };
 
   return (
-    <div className="rounded-xl bg-[#14141d] border border-[#232332] p-3 flex flex-col gap-3">
-      <span className="font-bold text-zinc-400 text-[11px] uppercase tracking-wider">
+    <div className="rounded-xl bg-zinc-50 border border-zinc-200 dark:bg-[#14141d] dark:border-[#232332] p-3 flex flex-col gap-3 transition-colors duration-200">
+      <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] uppercase tracking-wider">
         📄 Export
       </span>
 
-      <div className="flex rounded-lg overflow-hidden border border-[#272738] bg-[#0b0b10]">
+      <div className="flex rounded-lg overflow-hidden border border-zinc-300 dark:border-[#272738] bg-white dark:bg-[#0b0b10]">
         {(["png", "pdf"] as const).map((fmt) => (
           <button
             key={fmt}
@@ -54,7 +54,7 @@ export const ExportQualityCard = ({ settings, pageCount, onUpdateSettings, onExp
             onClick={() => onUpdateSettings({ exportFormat: fmt })}
             className={`flex-1 py-1.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${settings.exportFormat === fmt
               ? "bg-primary text-white shadow-[inset_0_0_12px_rgba(255,85,51,0.25)]"
-              : "text-zinc-500 hover:text-zinc-300"
+              : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
               }`}
           >
             {fmt === "png" ? "🖼️ PNG" : "📑 PDF"}
@@ -65,22 +65,22 @@ export const ExportQualityCard = ({ settings, pageCount, onUpdateSettings, onExp
       {/* Quality dropdown — hidden for PDF since resolution is set by canvas */}
       {!isPDF && (
         <Select value={settings.exportQuality} onValueChange={(val) => onUpdateSettings({ exportQuality: val as "standard" | "fullhd" | "ultrahd" })}        >
-          <SelectTrigger className="w-full rounded-lg bg-[#0b0b10] border border-[#272738] px-2.5 py-1.5 text-zinc-200 focus:outline-none focus:border-primary text-xs cursor-pointer h-8 justify-between">
+          <SelectTrigger className="w-full rounded-lg bg-white border border-zinc-300 text-zinc-800 dark:bg-[#0b0b10] dark:border-[#272738] dark:text-zinc-200 px-2.5 py-1.5 focus:outline-none focus:border-primary text-xs cursor-pointer h-8 justify-between">
             <SelectValue placeholder="Select quality" />
           </SelectTrigger>
-          <SelectContent className="bg-[#0b0b10] border border-[#272738] text-zinc-200 text-xs">
-            <SelectItem value="ultrahd" className="hover:bg-primary/10 focus:bg-primary/10 text-zinc-200 cursor-pointer">Ultra HD (Large Size)</SelectItem>
-            <SelectItem value="fullhd" className="hover:bg-primary/10 focus:bg-primary/10 text-zinc-200 cursor-pointer">Full HD (1080p)</SelectItem>
-            <SelectItem value="standard" className="hover:bg-primary/10 focus:bg-primary/10 text-zinc-200 cursor-pointer">Standard HD (Fast)</SelectItem>
+          <SelectContent className="bg-white border border-zinc-200 text-zinc-800 dark:bg-[#0b0b10] dark:border-[#272738] dark:text-zinc-200 text-xs">
+            <SelectItem value="ultrahd" className="hover:bg-primary/10 focus:bg-primary/10 text-zinc-800 dark:text-zinc-200 cursor-pointer">Ultra HD (Large Size)</SelectItem>
+            <SelectItem value="fullhd" className="hover:bg-primary/10 focus:bg-primary/10 text-zinc-800 dark:text-zinc-200 cursor-pointer">Full HD (1080p)</SelectItem>
+            <SelectItem value="standard" className="hover:bg-primary/10 focus:bg-primary/10 text-zinc-800 dark:text-zinc-200 cursor-pointer">Standard HD (Fast)</SelectItem>
           </SelectContent>
         </Select>
       )}
 
       {/* Compression toggle */}
-      <label className="group flex items-center justify-between cursor-pointer rounded-lg bg-[#0b0b10] border border-[#272738] p-2.5 transition-all duration-300 hover:border-primary/40 hover:bg-[#12121a]">
-        <span className="font-semibold text-zinc-300 text-xs transition-colors group-hover:text-zinc-100">
+      <label className="group flex items-center justify-between cursor-pointer rounded-lg bg-white border border-zinc-300 text-zinc-800 dark:bg-[#0b0b10] dark:border-[#272738] p-2.5 transition-all duration-300 hover:border-primary/40 hover:bg-zinc-100 dark:hover:bg-[#12121a]">
+        <span className="font-semibold text-zinc-700 dark:text-zinc-300 text-xs transition-colors group-hover:text-zinc-950 dark:group-hover:text-zinc-100">
           High Compression
-          <span className="ml-1 text-zinc-600 font-normal">(smaller file)</span>
+          <span className="ml-1 text-zinc-400 dark:text-zinc-600 font-normal">(smaller file)</span>
         </span>
         <AnimatedCheckbox
           checked={settings.highCompression}
@@ -90,9 +90,9 @@ export const ExportQualityCard = ({ settings, pageCount, onUpdateSettings, onExp
       </label>
 
       {/* Estimated size */}
-      <div className="flex items-center justify-between rounded-lg bg-[#0b0b10] border border-[#272738] px-2.5 py-2">
+      <div className="flex items-center justify-between rounded-lg bg-white border border-zinc-300 dark:bg-[#0b0b10] dark:border-[#272738] px-2.5 py-2">
         <span className="text-zinc-500 text-xs">Est. size</span>
-        <span className="text-zinc-200 text-xs font-bold tabular-nums tracking-wide">{sizeLabel}</span>
+        <span className="text-zinc-800 dark:text-zinc-200 text-xs font-bold tabular-nums tracking-wide">{sizeLabel}</span>
       </div>
 
       {/* Export button — optimistic */}

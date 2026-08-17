@@ -26,7 +26,23 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={cn("h-full", "antialiased", varela.variable, varela.className, caveat.variable, kalam.variable, patrickHand.variable, shadowsIntoLight.variable, indieFlower.variable, gochiHand.variable, "font-sans", geist.variable)}>
+    <html lang="en" suppressHydrationWarning className={cn("h-full", "antialiased", "dark", varela.variable, varela.className, caveat.variable, kalam.variable, patrickHand.variable, shadowsIntoLight.variable, indieFlower.variable, gochiHand.variable, "font-sans", geist.variable)}>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const storedTheme = localStorage.getItem('theme');
+                if (storedTheme === 'light') {
+                  document.documentElement.classList.remove('dark');
+                } else {
+                  document.documentElement.classList.add('dark');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

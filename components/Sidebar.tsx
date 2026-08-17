@@ -61,10 +61,10 @@ export default function Sidebar({ content, onContentChange, onAddImage, settings
     ];
 
     return (
-        <aside className="flex h-full w-full flex-col bg-[#09090b] text-zinc-200 border-r border-[#1f1f28] select-none">
-            <div className="grid grid-cols-3 border-b border-[#1f1f28] bg-[#111116]">
+        <aside className="flex h-full w-full flex-col bg-white text-zinc-800 border-r border-zinc-200 dark:bg-[#09090b] dark:text-zinc-200 dark:border-[#1f1f28] select-none transition-colors duration-200">
+            <div className="grid grid-cols-3 border-b border-zinc-200 bg-zinc-100/80 dark:border-[#1f1f28] dark:bg-[#111116]">
                 {tabs.map((tab, index) => (
-                    <button key={index} type="button" onClick={() => setActiveTab(tab.id)} className={`relative py-3.5 text-xs font-bold tracking-wider transition-colors ${activeTab === tab.id ? "text-primary" : "text-zinc-400 hover:text-zinc-200"}`}>
+                    <button key={index} type="button" onClick={() => setActiveTab(tab.id)} className={`relative py-3.5 text-xs font-bold tracking-wider transition-colors ${activeTab === tab.id ? "text-primary" : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"}`}>
                         {tab.label}
                         {activeTab === tab.id && (
                             <motion.span
