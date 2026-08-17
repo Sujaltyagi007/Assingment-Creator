@@ -47,6 +47,17 @@ function nextId(prefix: string): string {
   return `${prefix}-${idCounter}`;
 }
 
+export function syncIdCounter(doc: Document): void {
+  const ids = [doc.id, ...doc.pages.flatMap(p => [p.id, ...p.elements.map(el => el.id)])];
+  for (const id of ids) {
+    const m = id.match(/-(\d+)$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > idCounter) idCounter = n;
+    }
+  }
+}
+
 export function createDefaultDocument(): Document {
   const textElement: TextElement = {
     type: "text",
@@ -74,23 +85,43 @@ export type DocumentAction =
   | { type: "UPDATE_ELEMENT"; pageId: string; elementId: string; updates: any }
   | { type: "ADD_PAGE" }
   | { type: "DELETE_PAGE"; pageId: string }
-  | { type: "UPDATE_PAGE_SETTINGS"; pageId: string; settings: Partial<GlobalSettings> };
+  | { type: "UPDATE_PAGE_SETTINGS"; pageId: string; settings: Partial<GlobalSettings> }
+  | { type: "LOAD_DOCUMENT"; document: Document };
 
 export function documentReducer(doc: Document, action: DocumentAction): Document {
   switch (action.type) {
+    case "LOAD_DOCUMENT": {
+      syncIdCounter(action.document);
+      const seenPageIds = new Set<string>();
+      const repairedPages = action.document.pages.map(page => {
+        let newPageId = page.id;
+        if (seenPageIds.has(newPageId)) {
+          newPageId = nextId("page");
+        }
+        seenPageIds.add(newPageId);
+        
+        const seenElementIds = new Set<string>();
+        const repairedElements = page.elements.map(el => {
+          let newElId = el.id;
+          if (seenElementIds.has(newElId)) {
+            newElId = nextId(el.type === "image" ? "img" : "text");
+          }
+          seenElementIds.add(newElId);
+          return { ...el, id: newElId };
+        });
+
+        return { ...page, id: newPageId, elements: repairedElements };
+      });
+      return { ...action.document, pages: repairedPages };
+    }
     case "SET_TEXT_CONTENT": {
       return {
         ...doc,
-        pages: doc.pages.map((page) =>
-          page.id !== action.pageId ? page : {
-            ...page,
-            elements: page.elements.map((el) =>
-              el.id === action.elementId && el.type === "text"
-                ? { ...el, content: action.content }
-                : el
-            ),
-          }
-        ),
+        pages: doc.pages.map((page) => page.id !== action.pageId ? page : {
+          ...page, elements: page.elements.map((el) =>
+            el.id === action.elementId && el.type === "text" ? { ...el, content: action.content } : el
+          )
+        }),
       };
     }
     case "ADD_IMAGE": {
@@ -105,7 +136,7 @@ export function documentReducer(doc: Document, action: DocumentAction): Document
                 type: "image",
                 id: nextId("img"),
                 src: action.src,
-                x: 397 - action.width / 2, 
+                x: 397 - action.width / 2,
                 y: 561 - action.height / 2,
                 width: action.width,
                 height: action.height,
@@ -150,7 +181,7 @@ export function documentReducer(doc: Document, action: DocumentAction): Document
     case "UPDATE_PAGE_SETTINGS": {
       return {
         ...doc,
-        pages: doc.pages.map((page) => 
+        pages: doc.pages.map((page) =>
           page.id !== action.pageId ? page : {
             ...page,
             settingsOverride: { ...page.settingsOverride, ...action.settings }

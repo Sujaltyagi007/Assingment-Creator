@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Signika, Geist } from "next/font/google";
 import { caveat, kalam, patrickHand, shadowsIntoLight, indieFlower, gochiHand } from "@/lib/fonts";
 import "./globals.css";
@@ -15,6 +15,13 @@ const varela = Signika({
 export const metadata: Metadata = {
   title: "Assignment Creator",
   description: "Generate handwriting sheets instantly",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
