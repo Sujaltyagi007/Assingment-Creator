@@ -195,9 +195,14 @@ export default function Editor() {
       return document.fonts.load(`16px "${font}"`).then(() => `"${font}"`);
     };
 
-    resolveFontFamily().then((fontFamily) => {
-      setFontFamily(fontFamily);
-      if (isMounted) renderPageToCanvas(canvas, activePage, activePageSettings, fontFamily, globalTextContent, activePageIndex);
+    resolveFontFamily()
+      .catch((err) => {
+        console.warn("Font load failed, falling back", err);
+        return fontFamily || "sans-serif";
+      })
+      .then((resolvedFamily) => {
+        setFontFamily(resolvedFamily);
+        if (isMounted) renderPageToCanvas(canvas, activePage, activePageSettings, resolvedFamily, globalTextContent, activePageIndex);
       });
 
     return () => { isMounted = false; };
@@ -380,7 +385,7 @@ export default function Editor() {
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          className="w-full h-full overflow-auto flex p-6 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full"
+          className="w-full h-full overflow-auto flex p-6 touch-pan-x touch-pan-y [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full"
         >
           <div className="relative shadow-2xl rounded-sm overflow-hidden flex items-center justify-center m-auto transition-all">
             <canvas
@@ -416,7 +421,7 @@ export default function Editor() {
           </button>
         </div>
 
-        <div className="fixed sm:absolute bottom-6 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-3 sm:top-[30%] sm:translate-y-[-30%] z-10 flex flex-row sm:flex-col items-center gap-4" style={{ perspective: '600px' }}>
+        <div className="fixed sm:absolute bottom-24 sm:bottom-6 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-3 sm:top-[30%] sm:translate-y-[-30%] z-10 flex flex-row sm:flex-col items-center gap-4" style={{ perspective: '600px' }}>
           <div className="rounded-2xl bg-zinc-950/65 border border-white/10 backdrop-blur-xl shadow-2xl p-3 flex flex-row sm:flex-col items-center gap-3 sm:gap-0">
             <motion.div layout ref={scrollContainerRef} className="flex flex-row sm:flex-col gap-3.5 max-w-[60vw] sm:max-w-none max-h-[12vh] sm:max-h-[50vh] overflow-x-auto sm:overflow-x-visible overflow-y-visible sm:overflow-y-auto py-2 px-1.5 scrollbar-none" >
               <AnimatePresence initial={false} mode="popLayout">
@@ -499,7 +504,7 @@ export default function Editor() {
         </AnimatePresence>
       </div>
 
-      <div className="fixed bottom-6 right-6 z-50 sm:hidden flex items-center bg-[#111116]/90 border border-zinc-800/80 rounded-full p-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.6)] backdrop-blur-md gap-1.5">
+      <div className="fixed bottom-24 sm:bottom-6 right-6 z-50 sm:hidden flex items-center bg-[#111116]/90 border border-zinc-800/80 rounded-full p-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.6)] backdrop-blur-md gap-1.5">
         <button type="button" onClick={() => setMobileView("edit")}
           className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer ${mobileView === "edit" ? "bg-[#FF5533] text-white shadow-[0_0_12px_rgba(255,85,51,0.5)]" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"}`} title="Edit Mode"        >
           <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
