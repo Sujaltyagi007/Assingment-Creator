@@ -9,36 +9,66 @@ interface ThemeToggleProps {
   variant?: "pill" | "icon";
 }
 
-export function ThemeToggle({ className = "", variant = "icon" }: ThemeToggleProps) {
-  const [theme, setTheme] = useState<"light" | "dark">("dark");
-  const [mounted, setMounted] = useState(false);
+type Theme = "light" | "dark";
 
-  useEffect(() => {
-    setMounted(true);
-    const stored = localStorage.getItem("theme") as "light" | "dark" | null;
-    if (stored) {
-      setTheme(stored);
-      if (stored === "dark") {
+const listeners = new Set<() => void>();
+
+function notify() {
+  listeners.forEach((listener) => listener());
+}
+
+function getThemeSnapshot(): Theme {
+  if (typeof window === "undefined") return "dark";
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
+function subscribeTheme(callback: () => void) {
+  listeners.add(callback);
+
+  const handleStorage = (e: StorageEvent) => {
+    if (e.key === "theme") {
+      const next = e.newValue === "light" ? "light" : "dark";
+      if (next === "dark") {
         document.documentElement.classList.add("dark");
       } else {
         document.documentElement.classList.remove("dark");
       }
-    } else {
-      // Default to dark mode
-      setTheme("dark");
-      document.documentElement.classList.add("dark");
+      notify();
     }
+  };
+
+  window.addEventListener("storage", handleStorage);
+
+  return () => {
+    listeners.delete(callback);
+    window.removeEventListener("storage", handleStorage);
+  };
+}
+
+export function setGlobalTheme(nextTheme: Theme) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem("theme", nextTheme);
+  } catch {}
+  if (nextTheme === "dark") {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
+  notify();
+}
+
+export function ThemeToggle({ className = "", variant = "icon" }: ThemeToggleProps) {
+  const [mounted, setMounted] = useState(false);
+  const theme = React.useSyncExternalStore(subscribeTheme, getThemeSnapshot, () => "dark" as Theme);
+
+  useEffect(() => {
+    setMounted(true);
   }, []);
 
   const toggleTheme = () => {
     const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    localStorage.setItem("theme", nextTheme);
-    if (nextTheme === "dark") {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
+    setGlobalTheme(nextTheme);
   };
 
   if (!mounted) {
