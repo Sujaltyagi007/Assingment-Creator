@@ -113,41 +113,41 @@ function drawAntiCopyPattern(ctx: CanvasRenderingContext2D, settings: GlobalSett
   ctx.restore();
 }
 
+let cachedScannerCanvas: HTMLCanvasElement | null = null;
+function getScannerCanvas(): HTMLCanvasElement {
+  if (cachedScannerCanvas) return cachedScannerCanvas;
+  const width = PAGE_WIDTH_PX, height = PAGE_HEIGHT_PX;
+  const c = document.createElement("canvas");
+  c.width = width; c.height = height;
+  const gc = c.getContext("2d")!;
+  const data = gc.createImageData(width, height);
+  const d = data.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const tone = Math.random() * 70 + 160;
+    d[i] = d[i + 1] = d[i + 2] = tone;
+    d[i + 3] = Math.random() * 50 + 40;
+  }
+  gc.putImageData(data, 0, 0);
+  return (cachedScannerCanvas = c);
+}
+
 function drawScannerEffect(ctx: CanvasRenderingContext2D, settings: GlobalSettings) {
   if (!settings.scannerEffect) return;
-
-  const width = PAGE_WIDTH_PX;
-  const height = PAGE_HEIGHT_PX;
-  const grainCanvas = document.createElement("canvas");
-  grainCanvas.width = width;
-  grainCanvas.height = height;
-  const gc = grainCanvas.getContext("2d")!;
-  const imageData = gc.createImageData(width, height);
-  const data = imageData.data;
-
-  for (let i = 0; i < data.length; i += 4) {
-    const tone = Math.random() * 70 + 160;
-    data[i] = tone;
-    data[i + 1] = tone;
-    data[i + 2] = tone;
-    data[i + 3] = Math.random() * 50 + 40;   // higher alpha (40–90) for denser grain
-  }
-  gc.putImageData(imageData, 0, 0);
-
+  const width = PAGE_WIDTH_PX, height = PAGE_HEIGHT_PX;
   ctx.save();
-  ctx.globalAlpha = 0.55;                  // increased opacity from 0.15
+  ctx.globalAlpha = 0.55;
   ctx.globalCompositeOperation = "multiply";
-  ctx.drawImage(grainCanvas, 0, 0);
+  ctx.drawImage(getScannerCanvas(), 0, 0);
   ctx.restore();
 
-  const lightGradient = ctx.createLinearGradient(0, 0, width, 0);
-  lightGradient.addColorStop(0, "rgba(0, 0, 0, 0)");     // Dark binding crease at x = 0
-  lightGradient.addColorStop(0.03, "rgba(0, 0, 0, 0.08)");   // Quick falloff
-  lightGradient.addColorStop(0.08, "rgba(0, 0, 0, 0.0)");    // Flat normal bright paper area
-  lightGradient.addColorStop(1, "rgba(0, 0, 0, 0.0)");       // Completely transparent on the right
+  const lg = ctx.createLinearGradient(0, 0, width, 0);
+  lg.addColorStop(0, "rgba(0, 0, 0, 0)");
+  lg.addColorStop(0.03, "rgba(0, 0, 0, 0.08)");
+  lg.addColorStop(0.08, "rgba(0, 0, 0, 0.0)");
+  lg.addColorStop(1, "rgba(0, 0, 0, 0.0)");
 
   ctx.save();
-  ctx.fillStyle = lightGradient;
+  ctx.fillStyle = lg;
   ctx.fillRect(0, 0, width, height);
   ctx.restore();
 }
@@ -160,8 +160,7 @@ export function renderPageToCanvas(
   globalTextContent: string = "",
   pageIndex: number = 0
 ) {
-  canvas.width = PAGE_WIDTH_PX;
-  canvas.height = PAGE_HEIGHT_PX;
+  canvas.width = PAGE_WIDTH_PX; canvas.height = PAGE_HEIGHT_PX;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   drawPaperBackground(ctx, settings);
@@ -169,161 +168,91 @@ export function renderPageToCanvas(
   drawWatermark(ctx, settings, fontFamily);
   drawHeaderFooter(ctx, settings, fontFamily, pageIndex);
 
+  let lastMeasureFont = "";
   const measureChar = (ch: string, bold?: boolean, italic?: boolean) => {
-    ctx.save();
-    const italicPrefix = italic ? "italic " : "";
-    const boldPrefix = bold ? "bold " : "";
-    ctx.font = `${italicPrefix}${boldPrefix}${settings.fontSize}px ${fontFamily}`;
-    const width = ctx.measureText(ch).width;
-    ctx.restore();
-    return width;
+    const f = `${italic ? "italic " : ""}${bold ? "bold " : ""}${settings.fontSize}px ${fontFamily}`;
+    if (f !== lastMeasureFont) { ctx.font = f; lastMeasureFont = f; }
+    return ctx.measureText(ch).width;
   };
+
   const margins = getMargins(settings.marginPreset);
 
-  for (const element of page.elements) {
-    if (element.type === "image") {
-      // Draw image
-      const img = new Image();
-      img.src = element.src;
-      if (img.complete) {
+  for (const el of page.elements) {
+    if (el.type === "image") {
+      const img = new Image(); img.src = el.src;
+      const draw = () => {
         ctx.save();
-        ctx.translate(element.x + element.width / 2, element.y + element.height / 2);
-        ctx.rotate((element.rotation * Math.PI) / 180);
-        ctx.drawImage(img, -element.width / 2, -element.height / 2, element.width, element.height);
+        ctx.translate(el.x + el.width / 2, el.y + el.height / 2);
+        if (el.rotation) ctx.rotate((el.rotation * Math.PI) / 180);
+        ctx.drawImage(img, -el.width / 2, -el.height / 2, el.width, el.height);
         ctx.restore();
-      } else {
-        img.onload = () => {
-          ctx.save();
-          ctx.translate(element.x + element.width / 2, element.y + element.height / 2);
-          ctx.rotate((element.rotation * Math.PI) / 180);
-          ctx.drawImage(img, -element.width / 2, -element.height / 2, element.width, element.height);
-          ctx.restore();
-        };
-      }
+      };
+      img.complete ? draw() : (img.onload = draw);
     }
   }
 
   const lines = layoutText({
-    content: globalTextContent,
-    fontSize: settings.fontSize,
-    lineSpacing: settings.lineSpacing,
-    pageWidth: PAGE_WIDTH_PX,
-    pageHeight: PAGE_HEIGHT_PX,
-    margins: {
-      ...margins,
-      left: settings.leftMargin ?? 105,
-      top: settings.topMargin ?? 105,
-      right: 20
-    },
-    measureChar,
-    wordSpacing: settings.wordSpacing ?? 1.0,
+    content: globalTextContent, fontSize: settings.fontSize, lineSpacing: settings.lineSpacing,
+    pageWidth: PAGE_WIDTH_PX, pageHeight: PAGE_HEIGHT_PX,
+    margins: { ...margins, left: settings.leftMargin ?? 105, top: settings.topMargin ?? 105, right: 20 },
+    measureChar, wordSpacing: settings.wordSpacing ?? 1.0,
   });
 
   const nextGlyphTransform = createJitterGenerator(settings.realism);
+  let lastFont = "", lastColor = "";
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   for (const line of lines) {
     if (line.pageIndex !== pageIndex) continue;
 
-    let highlightStartX: number | null = null;
-    let highlightEndX = 0;
-    let highlightY = 0;
-
-    const drawHighlightSpan = (sX: number, eX: number, yPos: number) => {
-      const padX = Math.max(2, settings.fontSize * 0.1);
-      const fillX = sX - padX;
-      const fillWidth = (eX - sX) + (padX * 2);
-      const highlightHeight = settings.fontSize * 1.15;
-      const highlightTopY = yPos - settings.fontSize * 0.85;
-
-      ctx.save();
+    let hlSX: number | null = null, hlEX = 0, hlY = 0;
+    const drawHL = (sX: number, eX: number, yPos: number) => {
+      const pX = Math.max(2, settings.fontSize * 0.1), fX = sX - pX, fW = (eX - sX) + (pX * 2);
       ctx.fillStyle = "rgba(253, 224, 71, 0.42)";
-      if (typeof ctx.roundRect === "function") {
-        ctx.beginPath();
-        ctx.roundRect(fillX, highlightTopY, fillWidth, highlightHeight, 3);
-        ctx.fill();
-      } else {
-        ctx.fillRect(fillX, highlightTopY, fillWidth, highlightHeight);
-      }
-      ctx.restore();
+      ctx.fillRect(fX, yPos - settings.fontSize * 0.85, fW, settings.fontSize * 1.15);
+      lastColor = "";
     };
 
-      for (let i = 0; i < line.glyphs.length; i++) {
-        const glyph = line.glyphs[i];
-        if (glyph.highlight) {
-          const charWidth = measureChar(glyph.char, glyph.bold, glyph.italic);
-          if (highlightStartX === null) {
-            highlightStartX = glyph.x;
-          }
-          highlightEndX = glyph.x + charWidth;
-          highlightY = glyph.y;
-        } else if (highlightStartX !== null) {
-          drawHighlightSpan(highlightStartX, highlightEndX, highlightY);
-          highlightStartX = null;
-        }
-      }
-      if (highlightStartX !== null) {
-        drawHighlightSpan(highlightStartX, highlightEndX, highlightY);
-      }
-
-      const lineText = line.glyphs.map((g) => g.char).join("").trim();
-      let currentLineColor = settings.inkColor;
-      if (settings.smartQA) {
-        if (/^(q|question|q\d+)(\.|\:|\s)/i.test(lineText)) {
-          currentLineColor = "#000000"; 
-        } else if (/^(ans|answer|a|ans\d+)(\.|\:|\s)/i.test(lineText)) {
-          currentLineColor = "#2563eb"; 
-        }
-      } else if (settings.autoHeadings && lineText === lineText.toUpperCase() && lineText.length > 3) {
-        currentLineColor = "#000000";
-      }
-
-      for (const glyph of line.glyphs) {
-        const transform = nextGlyphTransform();
-        ctx.save();
-        ctx.globalAlpha = transform.opacity;
-
-        // Resolve font for this character
-        const charItalic = glyph.italic ?? false;
-        const charBold = glyph.bold ?? false;
-        const italicPrefix = charItalic ? "italic " : "";
-        const boldPrefix = charBold ? "bold " : "";
-        ctx.font = `${italicPrefix}${boldPrefix}${settings.fontSize}px ${fontFamily}`;
-
-        // Resolve color
-        const charColor = glyph.color || currentLineColor;
-        ctx.fillStyle = charColor;
-
-        ctx.translate(glyph.x + transform.dx, glyph.y + transform.dy);
-        ctx.rotate(transform.rotation);
-
-        ctx.fillText(glyph.char, 0, 0);
-
-        // Underline
-        if (glyph.underline) {
-          const width = ctx.measureText(glyph.char).width;
-          ctx.beginPath();
-          ctx.lineWidth = Math.max(1, settings.fontSize / 16);
-          ctx.strokeStyle = charColor;
-          const underlineY = settings.fontSize * 0.12;
-          ctx.moveTo(0, underlineY);
-          ctx.lineTo(width, underlineY);
-          ctx.stroke();
-        }
-
-        // Strikethrough
-        if (glyph.strikethrough) {
-          const width = ctx.measureText(glyph.char).width;
-          ctx.beginPath();
-          ctx.lineWidth = Math.max(1, settings.fontSize / 16);
-          ctx.strokeStyle = charColor;
-          const strikethroughY = -settings.fontSize * 0.28;
-          ctx.moveTo(0, strikethroughY);
-          ctx.lineTo(width, strikethroughY);
-          ctx.stroke();
-        }
-
-        ctx.restore();
-      }
+    for (const g of line.glyphs) {
+      if (g.highlight) {
+        if (hlSX === null) hlSX = g.x;
+        hlEX = g.x + measureChar(g.char, g.bold, g.italic); hlY = g.y;
+      } else if (hlSX !== null) { drawHL(hlSX, hlEX, hlY); hlSX = null; }
     }
+    if (hlSX !== null) drawHL(hlSX, hlEX, hlY);
+
+    const lText = line.glyphs.map(g => g.char).join("").trim();
+    let lColor = settings.inkColor;
+    if (settings.smartQA) {
+      if (/^(q|question|q\d+)(\.|\:|\s)/i.test(lText)) lColor = "#000000";
+      else if (/^(ans|answer|a|ans\d+)(\.|\:|\s)/i.test(lText)) lColor = "#2563eb";
+    } else if (settings.autoHeadings && lText === lText.toUpperCase() && lText.length > 3) lColor = "#000000";
+
+    for (const g of line.glyphs) {
+      const tf = nextGlyphTransform();
+      ctx.globalAlpha = tf.opacity;
+
+      const tfnt = `${g.italic ? "italic " : ""}${g.bold ? "bold " : ""}${settings.fontSize}px ${fontFamily}`;
+      if (tfnt !== lastFont) { ctx.font = tfnt; lastFont = tfnt; }
+
+      const tcol = g.color || lColor;
+      if (tcol !== lastColor) { ctx.fillStyle = ctx.strokeStyle = tcol; lastColor = tcol; }
+
+      ctx.translate(g.x + tf.dx, g.y + tf.dy);
+      if (tf.rotation) ctx.rotate(tf.rotation);
+      ctx.fillText(g.char, 0, 0);
+
+      if (g.underline || g.strikethrough) {
+        const w = ctx.measureText(g.char).width;
+        ctx.beginPath();
+        ctx.lineWidth = Math.max(1, settings.fontSize / 16);
+        if (g.underline) { const y = settings.fontSize * 0.12; ctx.moveTo(0, y); ctx.lineTo(w, y); }
+        if (g.strikethrough) { const y = -settings.fontSize * 0.28; ctx.moveTo(0, y); ctx.lineTo(w, y); }
+        ctx.stroke();
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+  }
+  ctx.globalAlpha = 1.0;
   drawScannerEffect(ctx, settings);
 }

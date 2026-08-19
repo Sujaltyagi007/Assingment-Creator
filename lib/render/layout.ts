@@ -25,6 +25,7 @@ export interface LayoutGlyph {
   highlight?: boolean;
   strikethrough?: boolean;
   color?: string;
+  align?: "left" | "center";
 }
 
 export interface LayoutLine {
@@ -51,148 +52,105 @@ interface StyledChar {
   highlight: boolean;
   strikethrough: boolean;
   color: string;
+  align: "left" | "center";
 }
 
 /**
- * Parses BBCode style formatting: [b], [i], [u], [h], [s], [color=#hex]
+ * Parses BBCode style formatting: [b], [i], [u], [h], [s], [center], [color=#hex]
  */
 function parseStyledText(content: string): StyledChar[] {
   const chars: StyledChar[] = [];
-  let bold = false;
-  let italic = false;
-  let underline = false;
-  let highlight = false;
-  let strikethrough = false;
-  const colorStack: string[] = [];
-
-  let i = 0;
-  while (i < content.length) {
-    if (content[i] === "[") {
-      const closeIdx = content.indexOf("]", i);
-      if (closeIdx !== -1) {
-        const tag = content.substring(i + 1, closeIdx);
-        if (tag === "b") { bold = true; i = closeIdx + 1; continue; }
-        if (tag === "/b") { bold = false; i = closeIdx + 1; continue; }
-        if (tag === "i") { italic = true; i = closeIdx + 1; continue; }
-        if (tag === "/i") { italic = false; i = closeIdx + 1; continue; }
-        if (tag === "u") { underline = true; i = closeIdx + 1; continue; }
-        if (tag === "/u") { underline = false; i = closeIdx + 1; continue; }
-        if (tag === "h") { highlight = true; i = closeIdx + 1; continue; }
-        if (tag === "/h") { highlight = false; i = closeIdx + 1; continue; }
-        if (tag === "s") { strikethrough = true; i = closeIdx + 1; continue; }
-        if (tag === "/s") { strikethrough = false; i = closeIdx + 1; continue; }
-        if (tag.startsWith("color=")) {
-          colorStack.push(tag.substring(6));
-          i = closeIdx + 1;
-          continue;
-        }
-        if (tag === "/color") {
-          colorStack.pop();
-          i = closeIdx + 1;
-          continue;
-        }
+  let b = false, i = false, u = false, h = false, s = false, align: "left" | "center" = "left";
+  const cStack: string[] = [];
+  for (let idx = 0; idx < content.length; ) {
+    if (content[idx] === "[") {
+      const cIdx = content.indexOf("]", idx);
+      if (cIdx !== -1) {
+        const t = content.substring(idx + 1, cIdx), n = cIdx + 1;
+        if (t === "b") { b = true; idx = n; continue; }
+        if (t === "/b") { b = false; idx = n; continue; }
+        if (t === "i") { i = true; idx = n; continue; }
+        if (t === "/i") { i = false; idx = n; continue; }
+        if (t === "u") { u = true; idx = n; continue; }
+        if (t === "/u") { u = false; idx = n; continue; }
+        if (t === "h") { h = true; idx = n; continue; }
+        if (t === "/h") { h = false; idx = n; continue; }
+        if (t === "s") { s = true; idx = n; continue; }
+        if (t === "/s") { s = false; idx = n; continue; }
+        if (t === "center") { align = "center"; idx = n; continue; }
+        if (t === "/center") { align = "left"; idx = n; continue; }
+        if (t.startsWith("color=")) { cStack.push(t.substring(6)); idx = n; continue; }
+        if (t === "/color") { cStack.pop(); idx = n; continue; }
       }
     }
-
-    chars.push({
-      char: content[i],
-      bold,
-      italic,
-      underline,
-      highlight,
-      strikethrough,
-      color: colorStack[colorStack.length - 1] || "",
-    });
-    i++;
+    chars.push({ char: content[idx++], bold: b, italic: i, underline: u, highlight: h, strikethrough: s, color: cStack[cStack.length - 1] || "", align });
   }
-
   return chars;
 }
 
-export function layoutText(options: TextLayoutOptions): LayoutLine[] {
-  const { content, fontSize, lineSpacing, pageWidth, pageHeight, margins, measureChar, wordSpacing = 1.0 } = options;
-  const maxWidth = pageWidth - margins.left - margins.right;
-  const lineHeight = fontSize * lineSpacing;
-  const lines: LayoutLine[] = [];
-  let cursorY = margins.top + fontSize;
-  let currentPageIndex = 0;
+const LIST_PREFIX_REGEX = /^\s*(\([a-zA-Z0-9ivxlcdmIVXLCDM]+\.?\)|\d{1,3}[\.\)]+|[a-zA-Z][\.\)]+|[ivxlcdmIVXLCDM]{1,4}[\.\)]+|[•\-\*\>])(\s*)/;
 
-  const getCharWidth = (ch: string, bold: boolean, italic: boolean) => {
-    const width = measureChar(ch, bold, italic);
-    return ch === " " ? width * wordSpacing : width;
+export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
+  const { content, fontSize, lineSpacing, pageWidth, pageHeight, margins, measureChar, wordSpacing = 1.0 } = opts;
+  const maxW = pageWidth - margins.left - margins.right, lineH = fontSize * lineSpacing, lines: LayoutLine[] = [];
+  let curY = margins.top + fontSize, pageIdx = 0;
+
+  const cache = new Map<string, number>();
+  const getW = (c: {char: string, bold?: boolean, italic?: boolean}) => {
+    const k = `${c.char}-${c.bold}-${c.italic}`;
+    if (!cache.has(k)) cache.set(k, measureChar(c.char, c.bold, c.italic) * (c.char === " " ? wordSpacing : 1));
+    return cache.get(k)!;
   };
 
-  const allChars = parseStyledText(content);
-  
-  const paragraphs: StyledChar[][] = [];
-  let currentParagraph: StyledChar[] = [];
-  for (const c of allChars) {
-    if (c.char === "\n") {
-      paragraphs.push(currentParagraph);
-      currentParagraph = [];
-    } else {
-      currentParagraph.push(c);
+  const pushLine = (line: LayoutGlyph[], isCenter: boolean) => {
+    if (isCenter && line.length) {
+      const lineWidth = line[line.length - 1].x + getW(line[line.length - 1]) - line[0].x;
+      const targetStartX = (pageWidth - lineWidth) / 2;
+      const shiftX = targetStartX - line[0].x;
+      line.forEach(g => g.x += shiftX);
     }
-  }
-  paragraphs.push(currentParagraph);
+    lines.push({ glyphs: line, pageIndex: pageIdx });
+    if ((curY += lineH) > pageHeight - margins.bottom) { curY = margins.top + fontSize; pageIdx++; }
+  };
 
-  for (const paragraph of paragraphs) {
-    // Group characters into words
-    const words: StyledChar[][] = [];
-    let currentWord: StyledChar[] = [];
-    for (let i = 0; i < paragraph.length; i++) {
-      const c = paragraph[i];
-      currentWord.push(c);
-      if (c.char === " " || i === paragraph.length - 1) {
-        words.push(currentWord);
-        currentWord = [];
+  const paras: StyledChar[][] = [[]];
+  parseStyledText(content).forEach(c => c.char === "\n" ? paras.push([]) : paras[paras.length - 1].push(c));
+
+  paras.forEach(para => {
+    if (!para.length) return pushLine([], false);
+    const isCenter = para.some(c => c.align === "center");
+    let pref: StyledChar[] = [], body = para, line: LayoutGlyph[] = [], curX = margins.left, pGlyphs: LayoutGlyph[] = [];
+
+    if (!isCenter) {
+      const m = para.map(c => c.char).join("").match(LIST_PREFIX_REGEX);
+      if (m?.[0]) {
+        const ls = Math.max(0, para.findIndex(c => c.char !== " "));
+        pref = para.slice(ls, ls + m[1].trim().length);
+        body = para.slice(m[0].length);
       }
     }
 
-    let currentLine: LayoutGlyph[] = [];
-    let cursorX = margins.left;
+    if (pref.length) {
+      const pW = pref.reduce((s, c) => s + getW(c), 0), gL = 15, gR = Math.max(35, margins.left - 18);
+      let pX = Math.min(Math.max(gL, gR - pW), gL + Math.max(0, (gR - gL - pW) / 2));
+      pGlyphs = pref.map(c => ({ ...c, x: pX, y: curY, pX: pX += getW(c) })).map(({ pX, ...g }) => g);
+    }
 
-    const pushLine = () => {
-      lines.push({ glyphs: currentLine, pageIndex: currentPageIndex });
-      currentLine = [];
-      cursorX = margins.left;
-      cursorY += lineHeight;
-      if (cursorY > pageHeight - margins.bottom) {
-        cursorY = margins.top + fontSize;
-        currentPageIndex++;
-      }
-    };
+    if (!body.length && pGlyphs.length) return pushLine(pGlyphs, false);
 
-    words.forEach((word) => {
-      const wordWidth = word.reduce((sum, c) => sum + getCharWidth(c.char, c.bold, c.italic), 0);
-
-      if (cursorX + wordWidth > margins.left + maxWidth && currentLine.length > 0) {
-        pushLine();
-      }
-
-      for (const c of word) {
-        const chWidth = getCharWidth(c.char, c.bold, c.italic);
-        if (cursorX + chWidth > margins.left + maxWidth && currentLine.length > 0) {
-          pushLine();
-        }
-        currentLine.push({
-          char: c.char,
-          x: cursorX,
-          y: cursorY,
-          bold: c.bold,
-          italic: c.italic,
-          underline: c.underline,
-          highlight: c.highlight,
-          strikethrough: c.strikethrough,
-          color: c.color,
-        });
-        cursorX += chWidth;
-      }
+    body.reduce((acc, c) => (c.char === " " ? acc.push([c]) : acc[acc.length - 1].push(c), acc), [[]] as StyledChar[][]).forEach((w, i) => {
+      if (curX + w.reduce((s, c) => s + getW(c), 0) > margins.left + maxW && line.length) { pushLine(line, isCenter); line = []; curX = margins.left; }
+      if (i === 0 && pGlyphs.length && !line.length) line.push(...pGlyphs);
+      w.forEach(c => {
+        const cW = getW(c);
+        if (curX + cW > margins.left + maxW && line.length) { pushLine(line, isCenter); line = []; curX = margins.left; }
+        line.push({ ...c, x: curX, y: curY });
+        curX += cW;
+      });
     });
+    if (line.length || pGlyphs.length) pushLine(line.length ? line : pGlyphs, isCenter);
+  });
 
-    pushLine();
-  }
-
-  if (lines.length > 1 && lines[lines.length - 1].glyphs.length === 0) lines.pop();
+  if (lines.length > 1 && !lines[lines.length - 1].glyphs.length) lines.pop();
   return lines;
 }

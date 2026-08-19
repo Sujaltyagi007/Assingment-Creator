@@ -9,7 +9,34 @@ export function useFormatText() {
         underline: false,
         strikethrough: false,
         highlight: false,
+        center: false,
     });
+
+    const isSelectionCentered = (): boolean => {
+        if (typeof window === "undefined") return false;
+        try {
+            if (document.queryCommandState("justifyCenter")) return true;
+        } catch {}
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0) return false;
+
+        let node: Node | null = sel.getRangeAt(0).commonAncestorContainer;
+        if (node && node.nodeType === Node.TEXT_NODE) {
+            node = node.parentNode;
+        }
+
+        while (node && node !== textareaRef.current) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+                const el = node as HTMLElement;
+                const align = el.style.textAlign || el.getAttribute("align");
+                if (el.tagName.toLowerCase() === "center" || align === "center") {
+                    return true;
+                }
+            }
+            node = node.parentNode;
+        }
+        return false;
+    };
 
     const isSelectionHighlighted = (): boolean => {
         if (typeof window === "undefined") return false;
@@ -45,6 +72,7 @@ export function useFormatText() {
             underline: document.queryCommandState("underline"),
             strikethrough: document.queryCommandState("strikeThrough"),
             highlight: isSelectionHighlighted(),
+            center: isSelectionCentered(),
         });
     };
 
@@ -68,6 +96,13 @@ export function useFormatText() {
             document.execCommand("underline", false);
         } else if (tag === "s") {
             document.execCommand("strikeThrough", false);
+        } else if (tag === "center") {
+            const isCurrentlyCentered = isSelectionCentered();
+            if (isCurrentlyCentered) {
+                document.execCommand("justifyLeft", false);
+            } else {
+                document.execCommand("justifyCenter", false);
+            }
         } else if (tag === "h") {
             const isCurrentlyHighlighted = isSelectionHighlighted();
             if (isCurrentlyHighlighted) {
