@@ -15,6 +15,7 @@ export interface GlyphTransform {
   dx: number;
   dy: number;
   rotation: number;
+  slant: number;
   opacity: number;
 }
 
@@ -27,7 +28,8 @@ export function createJitterGenerator(realism: RealismSettings): () => GlyphTran
       return {
         dx: 0,
         dy: 0,
-        rotation: slantRad,
+        rotation: 0,
+        slant: slantRad,
         opacity: 1 - random() * realism.pressureVariance,
       };
     }
@@ -38,7 +40,8 @@ export function createJitterGenerator(realism: RealismSettings): () => GlyphTran
     return {
       dx,
       dy,
-      rotation: slantRad + rotationJitter,
+      rotation: rotationJitter,
+      slant: slantRad,
       opacity,
     };
   };

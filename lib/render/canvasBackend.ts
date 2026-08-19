@@ -274,7 +274,8 @@ export function renderPageToCanvas(
           tf = {
             dx: 0,
             dy: 0,
-            rotation: slantRad,
+            rotation: 0,
+            slant: slantRad,
             opacity: 1 - random() * settings.realism.pressureVariance,
           };
         } else {
@@ -285,7 +286,8 @@ export function renderPageToCanvas(
           tf = {
             dx,
             dy,
-            rotation: slantRad + rotationJitter,
+            rotation: rotationJitter,
+            slant: slantRad,
             opacity,
           };
         }
@@ -297,6 +299,7 @@ export function renderPageToCanvas(
         const tcol = g.color || lColor;
         if (tcol !== lastColor) { octx.fillStyle = octx.strokeStyle = tcol; lastColor = tcol; }
         octx.translate(g.x + tf.dx, g.y + tf.dy);
+        if (tf.slant) octx.transform(1, 0, Math.tan(-tf.slant), 1, 0, 0);
         if (tf.rotation) octx.rotate(tf.rotation);
         octx.fillText(g.char, 0, 0);
 
@@ -363,7 +366,6 @@ export function renderPageToCanvas(
       }
       if (ulSX !== null) drawHandwrittenLine(ulSX, ulEX, ulY, ulSize, ulColor, true);
 
-      // Draw continuous strikethroughs
       let stSX: number | null = null, stEX = 0, stY = 0, stSize = settings.fontSize, stColor = "";
       for (const g of line.glyphs) {
         const gSize = g.fontSize || settings.fontSize;
@@ -389,8 +391,7 @@ export function renderPageToCanvas(
     return offscreen;
   };
 
-  // Cache offscreen canvas draws per content and settings hash
-  const cacheKey = `${globalTextContent}_${pageIndex}_${fontFamily}_${settings.fontSize}_${settings.lineSpacing}_${settings.inkColor}_${settings.realism.seed}_${settings.realism.jitterX}_${settings.realism.jitterY}`;
+  const cacheKey = `${globalTextContent}_${pageIndex}_${fontFamily}_${settings.fontSize}_${settings.lineSpacing}_${settings.wordSpacing}_${settings.inkColor}_${settings.realism.seed}_${settings.realism.jitterX}_${settings.realism.jitterY}_${settings.realism.slant}_${settings.realism.pressureVariance}`;
   const textCache = (globalThis as any).__canvasTextCache || ((globalThis as any).__canvasTextCache = new Map<string, HTMLCanvasElement>());
   let offscreenCanvas = textCache.get(cacheKey);
   if (!offscreenCanvas && typeof window !== "undefined") {

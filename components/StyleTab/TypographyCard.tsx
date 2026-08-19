@@ -12,7 +12,10 @@ export const TypographyCard = ({ onUpdateSettings, settings }: Props) => {
                 TYPOGRAPHY
             </span>
             <div className="flex flex-col gap-1">
-                <span className="font-semibold text-zinc-700 dark:text-zinc-300 text-[10px]">Font Scale</span>
+                <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">Font Scale</span>
+                    <span className="text-zinc-500 dark:text-zinc-400 font-medium">{settings.fontSize}px</span>
+                </div>
                 <input type="range" min={16} max={48} value={settings.fontSize}
                     onChange={(e) => onUpdateSettings({ fontSize: Number(e.target.value) })}
                     className="modern-range"
@@ -20,7 +23,10 @@ export const TypographyCard = ({ onUpdateSettings, settings }: Props) => {
             </div>
 
             <div className="flex flex-col gap-1">
-                <span className="font-semibold text-zinc-700 dark:text-zinc-300 text-[10px]">Word Spacing</span>
+                <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">Word Spacing</span>
+                    <span className="text-zinc-500 dark:text-zinc-400 font-medium">{settings.wordSpacing.toFixed(1)}x</span>
+                </div>
                 <input type="range" min={0.5} max={2.5} step={0.1}
                     value={settings.wordSpacing}
                     onChange={(e) => onUpdateSettings({ wordSpacing: Number(e.target.value) })}
@@ -30,7 +36,10 @@ export const TypographyCard = ({ onUpdateSettings, settings }: Props) => {
 
             {/* Line Height */}
             <div className="flex flex-col gap-1">
-                <span className="font-semibold text-zinc-700 dark:text-zinc-300 text-[10px]">Line Height</span>
+                <div className="flex justify-between items-center text-[10px]">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">Line Height</span>
+                    <span className="text-zinc-500 dark:text-zinc-400 font-medium">{settings.lineSpacing.toFixed(1)}</span>
+                </div>
                 <input
                     type="range"
                     min={1.0}
