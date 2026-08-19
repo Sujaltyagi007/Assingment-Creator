@@ -19,6 +19,7 @@ export interface LayoutGlyph {
   char: string;
   x: number;
   y: number;
+  srcIndex: number;
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
@@ -46,6 +47,7 @@ export interface TextLayoutOptions {
 
 interface StyledChar {
   char: string;
+  srcIndex: number;
   bold: boolean;
   italic: boolean;
   underline: boolean;
@@ -63,6 +65,7 @@ function parseStyledText(content: string): StyledChar[] {
   let b = false, i = false, u = false, h = false, s = false, align: "left" | "center" = "left";
   const cStack: string[] = [];
   for (let idx = 0; idx < content.length; ) {
+    const srcIndex = idx;
     if (content[idx] === "[") {
       const cIdx = content.indexOf("]", idx);
       if (cIdx !== -1) {
@@ -83,7 +86,7 @@ function parseStyledText(content: string): StyledChar[] {
         if (t === "/color") { cStack.pop(); idx = n; continue; }
       }
     }
-    chars.push({ char: content[idx++], bold: b, italic: i, underline: u, highlight: h, strikethrough: s, color: cStack[cStack.length - 1] || "", align });
+    chars.push({ char: content[idx++], srcIndex, bold: b, italic: i, underline: u, highlight: h, strikethrough: s, color: cStack[cStack.length - 1] || "", align });
   }
   return chars;
 }

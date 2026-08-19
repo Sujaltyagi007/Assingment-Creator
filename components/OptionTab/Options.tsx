@@ -1,9 +1,9 @@
 import { GlobalSettings } from '@/lib/types';
 import React from 'react';
-import { HeaderFooterCard } from './OptionTab/HeaderFooterCard';
-import { GeneralTogglesCard } from './OptionTab/GeneralTogglesCard';
-import { RealismTexturesCard } from './OptionTab/RealismTexturesCard';
-import { ExportQualityCard } from './OptionTab/ExportQualityCard';
+import { HeaderFooterCard } from './HeaderFooterCard';
+import { GeneralTogglesCard } from './GeneralTogglesCard';
+import { RealismTexturesCard } from './RealismTexturesCard';
+import { ExportQualityCard } from './ExportQualityCard';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 type OptionsProps = {

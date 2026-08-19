@@ -3,6 +3,7 @@ import { Signika, Geist } from "next/font/google";
 import { caveat, kalam, patrickHand, shadowsIntoLight, indieFlower, gochiHand } from "@/lib/fonts";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { DocumentProvider } from "@/lib/state/DocumentContext";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -43,7 +44,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <DocumentProvider>
+          {children}
+        </DocumentProvider>
+      </body>
     </html>
   );
 }

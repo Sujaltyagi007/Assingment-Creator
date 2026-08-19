@@ -86,6 +86,7 @@ export type DocumentAction =
   | { type: "ADD_PAGE" }
   | { type: "DELETE_PAGE"; pageId: string }
   | { type: "UPDATE_PAGE_SETTINGS"; pageId: string; settings: Partial<GlobalSettings> }
+  | { type: "ENSURE_PAGE_COUNT"; count: number }
   | { type: "LOAD_DOCUMENT"; document: Document };
 
 export function documentReducer(doc: Document, action: DocumentAction): Document {
@@ -208,6 +209,19 @@ export function documentReducer(doc: Document, action: DocumentAction): Document
         ...doc,
         pages: doc.pages.filter((p) => p.id !== action.pageId),
       };
+    }
+    case "ENSURE_PAGE_COUNT": {
+      const targetCount = Math.min(action.count, 25);
+      if (doc.pages.length >= targetCount) return doc;
+      const newPages = [...doc.pages];
+      while (newPages.length < targetCount) {
+        newPages.push({
+          id: nextId("page"),
+          elements: [],
+          settingsOverride: {},
+        });
+      }
+      return { ...doc, pages: newPages };
     }
     default:
       return doc;

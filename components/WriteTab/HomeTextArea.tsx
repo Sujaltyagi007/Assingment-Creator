@@ -9,24 +9,15 @@ export interface HomeTextAreaProps {
 }
 
 function bbcodeToHtml(text: string): string {
-    return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
         .replace(/\[center\]([\s\S]*?)\[\/center\]/g, '<div style="text-align: center;">$1</div>')
-        .replace(/\[b\]/g, "<strong>")
-        .replace(/\[\/b\]/g, "</strong>")
-        .replace(/\[i\]/g, "<em>")
-        .replace(/\[\/i\]/g, "</em>")
-        .replace(/\[u\]/g, "<u>")
-        .replace(/\[\/u\]/g, "</u>")
+        .replace(/\[b\]/g, "<strong>").replace(/\[\/b\]/g, "</strong>")
+        .replace(/\[i\]/g, "<em>").replace(/\[\/i\]/g, "</em>")
+        .replace(/\[u\]/g, "<u>").replace(/\[\/u\]/g, "</u>")
         .replace(/\[h\]/g, '<mark style="background-color: #fef08a; color: #000000; border-radius: 2px; padding: 0 2px;">')
-        .replace(/\[\/h\]/g, "</mark>")
-        .replace(/\[s\]/g, "<s>")
-        .replace(/\[\/s\]/g, "</s>")
-        .replace(/\[color=([^\]]+)\]/g, '<span style="color: $1">')
-        .replace(/\[\/color\]/g, "</span>")
-        .replace(/\n/g, "<br>");
+        .replace(/\[\/h\]/g, "</mark>").replace(/\[s\]/g, "<s>")
+        .replace(/\[\/s\]/g, "</s>").replace(/\[color=([^\]]+)\]/g, '<span style="color: $1">')
+        .replace(/\[\/color\]/g, "</span>").replace(/\n/g, "<br>");
 }
 
 function htmlToBbcode(html: string): string {
@@ -40,7 +31,6 @@ function htmlToBbcode(html: string): string {
             const el = node as HTMLElement;
             let text = "";
             el.childNodes.forEach(child => { text += parseNode(child); });
-
             const tag = el.tagName.toLowerCase();
             const bg = el.style.backgroundColor || el.style.background || el.getAttribute("bgcolor");
             const hasBg = bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "none";
@@ -56,7 +46,10 @@ function htmlToBbcode(html: string): string {
             if (textColor && !hasBg) fText = `[color=${textColor}]${fText}[/color]`;
             if (isCenter && fText.trim()) fText = `[center]${fText}[/center]`;
             if (tag === "br") return "\n";
-            if (tag === "div" || tag === "p") return fText ? "\n" + fText : "";
+            if (tag === "div" || tag === "p") {
+                if (fText === "\n") return "\n";
+                return fText ? "\n" + fText : "\n";
+            }
             return fText;
         }
         return "";
@@ -74,16 +67,12 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
         if (editableRef.current) {
             const currentHtml = editableRef.current.innerHTML;
             const expectedHtml = bbcodeToHtml(content);
-            if (htmlToBbcode(currentHtml) !== content) {
-                editableRef.current.innerHTML = expectedHtml;
-            }
+            if (htmlToBbcode(currentHtml) !== content) { editableRef.current.innerHTML = expectedHtml; }
         }
     }, [content]);
 
     const handleInput = useCallback(() => {
-        if (editableRef.current) {
-            onContentChange(htmlToBbcode(editableRef.current.innerHTML));
-        }
+        if (editableRef.current) onContentChange(htmlToBbcode(editableRef.current.innerHTML));
     }, [onContentChange]);
 
     const handleSelect = useCallback(() => {

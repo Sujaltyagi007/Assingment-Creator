@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { motion } from "motion/react";
 import { Style } from "@/components/Style";
 import { WriteTab } from "@/components/WriteTab";
-import { Options } from "@/components/Options";
+import { Options } from "@/components/OptionTab/Options";
 import { HomeTextArea } from "@/components/WriteTab/HomeTextArea";
 import { useFormatText } from "@/lib/hooks/handleFormatText";
 import type { GlobalSettings, RealismSettings } from "@/lib/types";

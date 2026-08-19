@@ -1,5 +1,5 @@
 import type { GlobalSettings, Page } from "@/lib/types";
-import { createJitterGenerator } from "@/lib/handwriting/jitter";
+import { mulberry32 } from "@/lib/handwriting/jitter";
 import { getMargins, layoutText } from "@/lib/render/layout";
 
 export const PAGE_WIDTH_PX = 794;
@@ -34,6 +34,26 @@ function drawRuledPaper(ctx: CanvasRenderingContext2D, settings: GlobalSettings)
   ctx.stroke();
 }
 
+function drawGraphPaper(ctx: CanvasRenderingContext2D, settings: GlobalSettings) {
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, PAGE_WIDTH_PX, PAGE_HEIGHT_PX);
+  ctx.strokeStyle = "#cad4e6";
+  ctx.lineWidth = 0.75;
+  const gridSize = 25;
+  for (let x = 0; x < PAGE_WIDTH_PX; x += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, PAGE_HEIGHT_PX);
+    ctx.stroke();
+  }
+  for (let y = 0; y < PAGE_HEIGHT_PX; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(PAGE_WIDTH_PX, y);
+    ctx.stroke();
+  }
+}
+
 function drawPaperBackground(ctx: CanvasRenderingContext2D, settings: GlobalSettings) {
   if (!settings.exportBackground) {
     ctx.clearRect(0, 0, PAGE_WIDTH_PX, PAGE_HEIGHT_PX);
@@ -43,6 +63,9 @@ function drawPaperBackground(ctx: CanvasRenderingContext2D, settings: GlobalSett
   switch (settings.paperStyle) {
     case "ruled":
       drawRuledPaper(ctx, settings);
+      break;
+    case "graph":
+      drawGraphPaper(ctx, settings);
       break;
     default:
       ctx.fillStyle = "#ffffff";
@@ -153,16 +176,17 @@ function drawScannerEffect(ctx: CanvasRenderingContext2D, settings: GlobalSettin
 }
 
 export function renderPageToCanvas(
-  canvas: HTMLCanvasElement, 
-  page: Page, 
-  settings: GlobalSettings, 
+  canvas: HTMLCanvasElement,
+  page: Page,
+  settings: GlobalSettings,
   fontFamily: string,
   globalTextContent: string = "",
-  pageIndex: number = 0
-) {
+  pageIndex: number = 0,
+  targetSrcIndex?: number | null
+): { maxRequiredPages: number, targetPageIndex?: number } {
   canvas.width = PAGE_WIDTH_PX; canvas.height = PAGE_HEIGHT_PX;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) return { maxRequiredPages: 1 };
   drawPaperBackground(ctx, settings);
   drawAntiCopyPattern(ctx, settings);
   drawWatermark(ctx, settings, fontFamily);
@@ -177,14 +201,21 @@ export function renderPageToCanvas(
 
   const margins = getMargins(settings.marginPreset);
 
+  const imageCache = (globalThis as any).__canvasImageCache || ((globalThis as any).__canvasImageCache = new Map<string, HTMLImageElement>());
+
   for (const el of page.elements) {
     if (el.type === "image") {
-      const img = new Image(); img.src = el.src;
+      let img = imageCache.get(el.src);
+      if (!img) {
+        img = new Image();
+        img.src = el.src;
+        imageCache.set(el.src, img);
+      }
       const draw = () => {
         ctx.save();
         ctx.translate(el.x + el.width / 2, el.y + el.height / 2);
         if (el.rotation) ctx.rotate((el.rotation * Math.PI) / 180);
-        ctx.drawImage(img, -el.width / 2, -el.height / 2, el.width, el.height);
+        ctx.drawImage(img!, -el.width / 2, -el.height / 2, el.width, el.height);
         ctx.restore();
       };
       img.complete ? draw() : (img.onload = draw);
@@ -198,61 +229,121 @@ export function renderPageToCanvas(
     measureChar, wordSpacing: settings.wordSpacing ?? 1.0,
   });
 
-  const nextGlyphTransform = createJitterGenerator(settings.realism);
-  let lastFont = "", lastColor = "";
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const renderTextToOffscreen = (): HTMLCanvasElement => {
+    const offscreen = document.createElement("canvas");
+    offscreen.width = PAGE_WIDTH_PX;
+    offscreen.height = PAGE_HEIGHT_PX;
+    const octx = offscreen.getContext("2d")!;
+    let lastFont = "", lastColor = "";
+    octx.setTransform(1, 0, 0, 1, 0, 0);
 
-  for (const line of lines) {
-    if (line.pageIndex !== pageIndex) continue;
+    for (const line of lines) {
+      if (line.pageIndex !== pageIndex) continue;
 
-    let hlSX: number | null = null, hlEX = 0, hlY = 0;
-    const drawHL = (sX: number, eX: number, yPos: number) => {
-      const pX = Math.max(2, settings.fontSize * 0.1), fX = sX - pX, fW = (eX - sX) + (pX * 2);
-      ctx.fillStyle = "rgba(253, 224, 71, 0.42)";
-      ctx.fillRect(fX, yPos - settings.fontSize * 0.85, fW, settings.fontSize * 1.15);
-      lastColor = "";
-    };
+      let hlSX: number | null = null, hlEX = 0, hlY = 0;
+      const drawHL = (sX: number, eX: number, yPos: number) => {
+        const pX = Math.max(2, settings.fontSize * 0.1), fX = sX - pX, fW = (eX - sX) + (pX * 2);
+        octx.fillStyle = "rgba(253, 224, 71, 0.42)";
+        octx.fillRect(fX, yPos - settings.fontSize * 0.85, fW, settings.fontSize * 1.15);
+        lastColor = "";
+      };
 
-    for (const g of line.glyphs) {
-      if (g.highlight) {
-        if (hlSX === null) hlSX = g.x;
-        hlEX = g.x + measureChar(g.char, g.bold, g.italic); hlY = g.y;
-      } else if (hlSX !== null) { drawHL(hlSX, hlEX, hlY); hlSX = null; }
-    }
-    if (hlSX !== null) drawHL(hlSX, hlEX, hlY);
-
-    const lText = line.glyphs.map(g => g.char).join("").trim();
-    let lColor = settings.inkColor;
-    if (settings.smartQA) {
-      if (/^(q|question|q\d+)(\.|\:|\s)/i.test(lText)) lColor = "#000000";
-      else if (/^(ans|answer|a|ans\d+)(\.|\:|\s)/i.test(lText)) lColor = "#2563eb";
-    } else if (settings.autoHeadings && lText === lText.toUpperCase() && lText.length > 3) lColor = "#000000";
-
-    for (const g of line.glyphs) {
-      const tf = nextGlyphTransform();
-      ctx.globalAlpha = tf.opacity;
-
-      const tfnt = `${g.italic ? "italic " : ""}${g.bold ? "bold " : ""}${settings.fontSize}px ${fontFamily}`;
-      if (tfnt !== lastFont) { ctx.font = tfnt; lastFont = tfnt; }
-
-      const tcol = g.color || lColor;
-      if (tcol !== lastColor) { ctx.fillStyle = ctx.strokeStyle = tcol; lastColor = tcol; }
-
-      ctx.translate(g.x + tf.dx, g.y + tf.dy);
-      if (tf.rotation) ctx.rotate(tf.rotation);
-      ctx.fillText(g.char, 0, 0);
-
-      if (g.underline || g.strikethrough) {
-        const w = ctx.measureText(g.char).width;
-        ctx.beginPath();
-        ctx.lineWidth = Math.max(1, settings.fontSize / 16);
-        if (g.underline) { const y = settings.fontSize * 0.12; ctx.moveTo(0, y); ctx.lineTo(w, y); }
-        if (g.strikethrough) { const y = -settings.fontSize * 0.28; ctx.moveTo(0, y); ctx.lineTo(w, y); }
-        ctx.stroke();
+      for (const g of line.glyphs) {
+        if (g.highlight) {
+          if (hlSX === null) hlSX = g.x;
+          hlEX = g.x + measureChar(g.char, g.bold, g.italic); hlY = g.y;
+        } else if (hlSX !== null) { drawHL(hlSX, hlEX, hlY); hlSX = null; }
       }
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (hlSX !== null) drawHL(hlSX, hlEX, hlY);
+
+      const lText = line.glyphs.map(g => g.char).join("").trim();
+      let lColor = settings.inkColor;
+      if (settings.smartQA) {
+        if (/^(q|question|q\d+)(\.|\:|\s)/i.test(lText)) lColor = "#000000";
+        else if (/^(ans|answer|a|ans\d+)(\.|\:|\s)/i.test(lText)) lColor = "#2563eb";
+      } else if (settings.autoHeadings && lText === lText.toUpperCase() && lText.length > 3) lColor = "#000000";
+
+      for (const g of line.glyphs) {
+        const gseed = settings.realism.seed + g.srcIndex;
+        const random = mulberry32(gseed);
+        const slantRad = (settings.realism.slant * Math.PI) / 180;
+        let tf;
+        if (Number(settings.realism.seed) <= 1) {
+          tf = {
+            dx: 0,
+            dy: 0,
+            rotation: slantRad,
+            opacity: 1 - random() * settings.realism.pressureVariance,
+          };
+        } else {
+          const dx = (random() - 0.5) * 2 * settings.realism.jitterX;
+          const dy = (random() - 0.5) * 2 * settings.realism.jitterY;
+          const rotationJitter = (random() - 0.5) * 2 * (Math.PI / 180) * 3;
+          const opacity = 1 - random() * settings.realism.pressureVariance;
+          tf = {
+            dx,
+            dy,
+            rotation: slantRad + rotationJitter,
+            opacity,
+          };
+        }
+
+        octx.globalAlpha = tf.opacity;
+        const tfnt = `${g.italic ? "italic " : ""}${g.bold ? "bold " : ""}${settings.fontSize}px ${fontFamily}`;
+        if (tfnt !== lastFont) { octx.font = tfnt; lastFont = tfnt; }
+        const tcol = g.color || lColor;
+        if (tcol !== lastColor) { octx.fillStyle = octx.strokeStyle = tcol; lastColor = tcol; }
+        octx.translate(g.x + tf.dx, g.y + tf.dy);
+        if (tf.rotation) octx.rotate(tf.rotation);
+        octx.fillText(g.char, 0, 0);
+
+        if (g.underline || g.strikethrough) {
+          octx.font = tfnt;
+          const w = octx.measureText(g.char).width;
+          octx.beginPath();
+          octx.lineWidth = Math.max(1, settings.fontSize / 16);
+          if (g.underline) { const y = settings.fontSize * 0.12; octx.moveTo(0, y); octx.lineTo(w, y); }
+          if (g.strikethrough) { const y = -settings.fontSize * 0.28; octx.moveTo(0, y); octx.lineTo(w, y); }
+          octx.stroke();
+        }
+        octx.setTransform(1, 0, 0, 1, 0, 0);
+      }
     }
+    return offscreen;
+  };
+
+  // Cache offscreen canvas draws per content and settings hash
+  const cacheKey = `${globalTextContent}_${pageIndex}_${fontFamily}_${settings.fontSize}_${settings.lineSpacing}_${settings.inkColor}_${settings.realism.seed}_${settings.realism.jitterX}_${settings.realism.jitterY}`;
+  const textCache = (globalThis as any).__canvasTextCache || ((globalThis as any).__canvasTextCache = new Map<string, HTMLCanvasElement>());
+  let offscreenCanvas = textCache.get(cacheKey);
+  if (!offscreenCanvas && typeof window !== "undefined") {
+    offscreenCanvas = renderTextToOffscreen();
+    textCache.set(cacheKey, offscreenCanvas);
   }
+
+  if (offscreenCanvas) {
+    ctx.drawImage(offscreenCanvas, 0, 0);
+  }
+
   ctx.globalAlpha = 1.0;
   drawScannerEffect(ctx, settings);
+
+  let targetPageIndex = undefined;
+  if (targetSrcIndex !== undefined && targetSrcIndex !== null) {
+    for (const line of lines) {
+      if (line.glyphs.length > 0 && line.glyphs[0].srcIndex <= targetSrcIndex && line.glyphs[line.glyphs.length - 1].srcIndex >= targetSrcIndex) {
+        targetPageIndex = line.pageIndex;
+        break;
+      }
+    }
+    if (targetPageIndex === undefined && lines.length > 0) {
+      const lastLine = lines[lines.length - 1];
+      if (targetSrcIndex >= (lastLine.glyphs.length > 0 ? lastLine.glyphs[lastLine.glyphs.length - 1].srcIndex : 0)) { targetPageIndex = lastLine.pageIndex; }
+    }
+  }
+
+  return {
+    maxRequiredPages: lines.length > 0 ? Math.max(...lines.map(l => l.pageIndex)) + 1 : 1,
+    targetPageIndex
+  };
 }
