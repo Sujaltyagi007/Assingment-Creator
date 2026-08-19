@@ -24,7 +24,7 @@ type Tabs = "write" | "style" | "settings";
 
 export default function Sidebar({ content, onContentChange, onAddImage, settings, onUpdateSettings, onUpdateRealism, onExportPNG, onExportPDF, pageCount }: SidebarProps) {
     const [activeTab, setActiveTab] = useState<Tabs>("write");
-    const { hasSelection, activeFormats, handleSelectionChange, handleFormatText } = useFormatText();
+    const { hasSelection, activeFormats, handleSelectionChange, handleFormatText } = useFormatText(settings.fontSize);
     const randomizeSeed = () => { onUpdateRealism({ seed: Math.floor(Math.random() * 100) + 1 }); };
     const applyPreset = (preset: "standard" | "cbse") => {
         if (preset === "standard") {
@@ -81,7 +81,7 @@ export default function Sidebar({ content, onContentChange, onAddImage, settings
                     <>
                         <WriteTab hasSelection={hasSelection} onFormatText={handleFormatText} activeFormats={activeFormats} />
                         <div className="flex-1 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none">
-                            <HomeTextArea content={content} onContentChange={onContentChange} autoCorrect={settings.autoCorrect} onSelectionChange={handleSelectionChange} onAddImage={onAddImage} />
+                            <HomeTextArea content={content} onContentChange={onContentChange} autoCorrect={settings.autoCorrect} onSelectionChange={handleSelectionChange} onAddImage={onAddImage} onFormatText={handleFormatText} baseFontSize={settings.fontSize} />
                         </div>
                     </>
                 )}

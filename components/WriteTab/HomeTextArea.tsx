@@ -6,9 +6,11 @@ export interface HomeTextAreaProps {
     autoCorrect?: boolean;
     onSelectionChange?: (hasSelection: boolean, selectionStart: number, selectionEnd: number, element: HTMLElement) => void;
     onAddImage?: (src: string, width: number, height: number) => void;
+    onFormatText?: (tag: string, value?: string) => void;
+    baseFontSize?: number;
 }
 
-function bbcodeToHtml(text: string): string {
+function bbcodeToHtml(text: string, baseFontSize: number = 28): string {
     return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
         .replace(/\[center\]([\s\S]*?)\[\/center\]/g, '<div style="text-align: center;">$1</div>')
         .replace(/\[b\]/g, "<strong>").replace(/\[\/b\]/g, "</strong>")
@@ -16,11 +18,18 @@ function bbcodeToHtml(text: string): string {
         .replace(/\[u\]/g, "<u>").replace(/\[\/u\]/g, "</u>")
         .replace(/\[h\]/g, '<mark style="background-color: #fef08a; color: #000000; border-radius: 2px; padding: 0 2px;">')
         .replace(/\[\/h\]/g, "</mark>").replace(/\[s\]/g, "<s>")
-        .replace(/\[\/s\]/g, "</s>").replace(/\[color=([^\]]+)\]/g, '<span style="color: $1">')
+        .replace(/\[\/s\]/g, "</s>")
+        .replace(/\[size=([^\]]+)\]/g, (match, sizeStr) => {
+            const canvasSize = parseInt(sizeStr, 10);
+            const uiSize = Math.round(canvasSize * (14 / baseFontSize));
+            return `<span style="font-size: ${uiSize}px;" data-size="${canvasSize}">`;
+        })
+        .replace(/\[\/size\]/g, "</span>")
+        .replace(/\[color=([^\]]+)\]/g, '<span style="color: $1">')
         .replace(/\[\/color\]/g, "</span>").replace(/\n/g, "<br>");
 }
 
-function htmlToBbcode(html: string): string {
+function htmlToBbcode(html: string, baseFontSize: number = 28): string {
     if (typeof document === "undefined") return html;
     const temp = document.createElement("div");
     temp.innerHTML = html;
@@ -35,6 +44,19 @@ function htmlToBbcode(html: string): string {
             const bg = el.style.backgroundColor || el.style.background || el.getAttribute("bgcolor");
             const hasBg = bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "none";
             const textColor = el.style.color || el.getAttribute("color");
+            
+            let sizeVal: string | null = el.getAttribute("data-size");
+            if (!sizeVal) {
+                const fontSize = el.style.fontSize;
+                if (fontSize) {
+                    const match = fontSize.match(/^(\d+)(px)?$/);
+                    if (match) {
+                        const uiSize = parseInt(match[1], 10);
+                        sizeVal = Math.round(uiSize * (baseFontSize / 14)).toString();
+                    }
+                }
+            }
+            
             const isCenter = tag === "center" || el.style.textAlign === "center" || el.getAttribute("align") === "center";
 
             let fText = text;
@@ -44,6 +66,7 @@ function htmlToBbcode(html: string): string {
             if (tag === "s" || tag === "strike" || tag === "del" || el.style.textDecoration?.includes("line-through") || el.style.textDecorationLine?.includes("line-through")) fText = `[s]${fText}[/s]`;
             if (tag === "mark" || hasBg) fText = `[h]${fText}[/h]`;
             if (textColor && !hasBg) fText = `[color=${textColor}]${fText}[/color]`;
+            if (sizeVal) fText = `[size=${sizeVal}]${fText}[/size]`;
             if (isCenter && fText.trim()) fText = `[center]${fText}[/center]`;
             if (tag === "br") return "\n";
             if (tag === "div" || tag === "p") {
@@ -60,20 +83,45 @@ function htmlToBbcode(html: string): string {
     return bbcode.replace(/^\n/, "");
 }
 
-export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectionChange, onAddImage }: HomeTextAreaProps) => {
+export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectionChange, onAddImage, onFormatText, baseFontSize = 28 }: HomeTextAreaProps) => {
     const editableRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     useEffect(() => {
         if (editableRef.current) {
             const currentHtml = editableRef.current.innerHTML;
-            const expectedHtml = bbcodeToHtml(content);
-            if (htmlToBbcode(currentHtml) !== content) { editableRef.current.innerHTML = expectedHtml; }
+            const expectedHtml = bbcodeToHtml(content, baseFontSize);
+            if (htmlToBbcode(currentHtml, baseFontSize) !== content) { editableRef.current.innerHTML = expectedHtml; }
         }
-    }, [content]);
+    }, [content, baseFontSize]);
 
     const handleInput = useCallback(() => {
-        if (editableRef.current) onContentChange(htmlToBbcode(editableRef.current.innerHTML));
-    }, [onContentChange]);
+        if (editableRef.current) onContentChange(htmlToBbcode(editableRef.current.innerHTML, baseFontSize));
+    }, [onContentChange, baseFontSize]);
+
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (!onFormatText) return;
+        
+        // Ctrl+Shift+> or Ctrl+Shift+.
+        if (e.ctrlKey && e.shiftKey && (e.key === ">" || e.key === ".")) {
+            e.preventDefault();
+            onFormatText("size-inc");
+        }
+        // Ctrl+Shift+< or Ctrl+Shift+,
+        else if (e.ctrlKey && e.shiftKey && (e.key === "<" || e.key === ",")) {
+            e.preventDefault();
+            onFormatText("size-dec");
+        }
+        // Ctrl+Shift++ (Ctrl and Plus key)
+        else if (e.ctrlKey && e.shiftKey && (e.key === "+" || e.key === "=")) {
+            e.preventDefault();
+            onFormatText("size-inc");
+        }
+        // Ctrl+- (Ctrl and Minus key)
+        else if (e.ctrlKey && e.key === "-") {
+            e.preventDefault();
+            onFormatText("size-dec");
+        }
+    }, [onFormatText]);
 
     const handleSelect = useCallback(() => {
         const selection = window.getSelection();
@@ -99,12 +147,13 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
         <div className="flex-1 flex flex-col rounded-2xl bg-zinc-50 border border-zinc-200 dark:bg-[#13131a] dark:border-[#232330] h-full p-4 shadow-inner min-h-62.5 sm:min-h-87.5 relative pb-12 transition-colors duration-200">
             <div ref={editableRef} contentEditable
                 onInput={handleInput}
+                onKeyDown={handleKeyDown}
                 onSelect={handleSelect}
                 onKeyUp={handleSelect}
                 onMouseUp={handleSelect}
                 onTouchEnd={handleSelect}
                 spellCheck={autoCorrect}
-                className="w-full flex-1 bg-transparent text-zinc-900 placeholder-zinc-400 dark:text-zinc-100 dark:placeholder-zinc-600 focus:outline-none resize-none font-sans text-base leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none" style={{ minHeight: "150px" }}
+                className="w-full flex-1 bg-transparent text-zinc-900 placeholder-zinc-400 dark:text-zinc-100 dark:placeholder-zinc-600 focus:outline-none resize-none font-sans text-sm leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none" style={{ minHeight: "150px" }}
             />
             <div className="absolute bottom-3 left-4 flex items-center">
                 <input type="file" accept=".svg" className="hidden" ref={fileInputRef} onChange={handleFileChange} />

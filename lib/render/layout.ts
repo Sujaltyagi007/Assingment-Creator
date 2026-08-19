@@ -27,6 +27,7 @@ export interface LayoutGlyph {
   strikethrough?: boolean;
   color?: string;
   align?: "left" | "center";
+  fontSize?: number;
 }
 
 export interface LayoutLine {
@@ -41,7 +42,7 @@ export interface TextLayoutOptions {
   pageWidth: number;
   pageHeight: number;
   margins: PageMargins;
-  measureChar: (char: string, bold?: boolean, italic?: boolean) => number;
+  measureChar: (char: string, bold?: boolean, italic?: boolean, charFontSize?: number) => number;
   wordSpacing?: number;
 }
 
@@ -55,15 +56,17 @@ interface StyledChar {
   strikethrough: boolean;
   color: string;
   align: "left" | "center";
+  fontSize?: number;
 }
 
 /**
- * Parses BBCode style formatting: [b], [i], [u], [h], [s], [center], [color=#hex]
+ * Parses BBCode style formatting: [b], [i], [u], [h], [s], [center], [color=#hex], [size=N]
  */
 function parseStyledText(content: string): StyledChar[] {
   const chars: StyledChar[] = [];
   let b = false, i = false, u = false, h = false, s = false, align: "left" | "center" = "left";
   const cStack: string[] = [];
+  const sStack: number[] = [];
   for (let idx = 0; idx < content.length; ) {
     const srcIndex = idx;
     if (content[idx] === "[") {
@@ -84,9 +87,22 @@ function parseStyledText(content: string): StyledChar[] {
         if (t === "/center") { align = "left"; idx = n; continue; }
         if (t.startsWith("color=")) { cStack.push(t.substring(6)); idx = n; continue; }
         if (t === "/color") { cStack.pop(); idx = n; continue; }
+        if (t.startsWith("size=")) { sStack.push(parseInt(t.substring(5), 10)); idx = n; continue; }
+        if (t === "/size") { sStack.pop(); idx = n; continue; }
       }
     }
-    chars.push({ char: content[idx++], srcIndex, bold: b, italic: i, underline: u, highlight: h, strikethrough: s, color: cStack[cStack.length - 1] || "", align });
+    chars.push({
+      char: content[idx++],
+      srcIndex,
+      bold: b,
+      italic: i,
+      underline: u,
+      highlight: h,
+      strikethrough: s,
+      color: cStack[cStack.length - 1] || "",
+      align,
+      fontSize: sStack[sStack.length - 1]
+    });
   }
   return chars;
 }
@@ -99,9 +115,9 @@ export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
   let curY = margins.top + fontSize, pageIdx = 0;
 
   const cache = new Map<string, number>();
-  const getW = (c: {char: string, bold?: boolean, italic?: boolean}) => {
-    const k = `${c.char}-${c.bold}-${c.italic}`;
-    if (!cache.has(k)) cache.set(k, measureChar(c.char, c.bold, c.italic) * (c.char === " " ? wordSpacing : 1));
+  const getW = (c: {char: string, bold?: boolean, italic?: boolean, fontSize?: number}) => {
+    const k = `${c.char}-${c.bold}-${c.italic}-${c.fontSize || fontSize}`;
+    if (!cache.has(k)) cache.set(k, measureChar(c.char, c.bold, c.italic, c.fontSize || fontSize) * (c.char === " " ? wordSpacing : 1));
     return cache.get(k)!;
   };
 

@@ -193,8 +193,8 @@ export function renderPageToCanvas(
   drawHeaderFooter(ctx, settings, fontFamily, pageIndex);
 
   let lastMeasureFont = "";
-  const measureChar = (ch: string, bold?: boolean, italic?: boolean) => {
-    const f = `${italic ? "italic " : ""}${bold ? "bold " : ""}${settings.fontSize}px ${fontFamily}`;
+  const measureChar = (ch: string, bold?: boolean, italic?: boolean, charFontSize?: number) => {
+    const f = `${italic ? "italic " : ""}${bold ? "bold " : ""}${charFontSize || settings.fontSize}px ${fontFamily}`;
     if (f !== lastMeasureFont) { ctx.font = f; lastMeasureFont = f; }
     return ctx.measureText(ch).width;
   };
@@ -240,21 +240,23 @@ export function renderPageToCanvas(
     for (const line of lines) {
       if (line.pageIndex !== pageIndex) continue;
 
-      let hlSX: number | null = null, hlEX = 0, hlY = 0;
-      const drawHL = (sX: number, eX: number, yPos: number) => {
-        const pX = Math.max(2, settings.fontSize * 0.1), fX = sX - pX, fW = (eX - sX) + (pX * 2);
+      let hlSX: number | null = null, hlEX = 0, hlY = 0, hlSize = settings.fontSize;
+      const drawHL = (sX: number, eX: number, yPos: number, size: number) => {
+        const pX = Math.max(2, size * 0.1), fX = sX - pX, fW = (eX - sX) + (pX * 2);
         octx.fillStyle = "rgba(253, 224, 71, 0.42)";
-        octx.fillRect(fX, yPos - settings.fontSize * 0.85, fW, settings.fontSize * 1.15);
+        octx.fillRect(fX, yPos - size * 0.85, fW, size * 1.15);
         lastColor = "";
       };
 
       for (const g of line.glyphs) {
+        const gSize = g.fontSize || settings.fontSize;
         if (g.highlight) {
-          if (hlSX === null) hlSX = g.x;
-          hlEX = g.x + measureChar(g.char, g.bold, g.italic); hlY = g.y;
-        } else if (hlSX !== null) { drawHL(hlSX, hlEX, hlY); hlSX = null; }
+          if (hlSX === null) { hlSX = g.x; hlSize = gSize; }
+          hlEX = g.x + measureChar(g.char, g.bold, g.italic, g.fontSize); hlY = g.y;
+          hlSize = Math.max(hlSize, gSize);
+        } else if (hlSX !== null) { drawHL(hlSX, hlEX, hlY, hlSize); hlSX = null; }
       }
-      if (hlSX !== null) drawHL(hlSX, hlEX, hlY);
+      if (hlSX !== null) drawHL(hlSX, hlEX, hlY, hlSize);
 
       const lText = line.glyphs.map(g => g.char).join("").trim();
       let lColor = settings.inkColor;
@@ -289,7 +291,8 @@ export function renderPageToCanvas(
         }
 
         octx.globalAlpha = tf.opacity;
-        const tfnt = `${g.italic ? "italic " : ""}${g.bold ? "bold " : ""}${settings.fontSize}px ${fontFamily}`;
+        const gSize = g.fontSize || settings.fontSize;
+        const tfnt = `${g.italic ? "italic " : ""}${g.bold ? "bold " : ""}${gSize}px ${fontFamily}`;
         if (tfnt !== lastFont) { octx.font = tfnt; lastFont = tfnt; }
         const tcol = g.color || lColor;
         if (tcol !== lastColor) { octx.fillStyle = octx.strokeStyle = tcol; lastColor = tcol; }
@@ -297,17 +300,91 @@ export function renderPageToCanvas(
         if (tf.rotation) octx.rotate(tf.rotation);
         octx.fillText(g.char, 0, 0);
 
-        if (g.underline || g.strikethrough) {
-          octx.font = tfnt;
-          const w = octx.measureText(g.char).width;
-          octx.beginPath();
-          octx.lineWidth = Math.max(1, settings.fontSize / 16);
-          if (g.underline) { const y = settings.fontSize * 0.12; octx.moveTo(0, y); octx.lineTo(w, y); }
-          if (g.strikethrough) { const y = -settings.fontSize * 0.28; octx.moveTo(0, y); octx.lineTo(w, y); }
-          octx.stroke();
-        }
         octx.setTransform(1, 0, 0, 1, 0, 0);
       }
+
+      const drawHandwrittenLine = (sX: number, eX: number, yPos: number, size: number, color: string, isUnderline: boolean) => {
+        octx.strokeStyle = color;
+        octx.lineWidth = Math.max(1, size / 16);
+        octx.beginPath();
+        
+        const targetY = yPos + (isUnderline ? size * 0.12 : -size * 0.28);
+        const length = eX - sX;
+        const lineSeed = settings.realism.seed + Math.floor(sX) + Math.floor(yPos);
+        const random = mulberry32(lineSeed);
+        
+        const pressureJitter = Number(settings.realism.seed) <= 1 ? 0 : settings.realism.jitterY;
+        const startJitterY = (random() - 0.5) * pressureJitter * 2.5;
+        const endJitterY = (random() - 0.5) * pressureJitter * 2.5;
+        
+        const step = 6;
+        let first = true;
+        
+        for (let x = sX; x <= eX; x += step) {
+          const t = (x - sX) / (length || 1);
+          const baseDrift = startJitterY * (1 - t) + endJitterY * t;
+          const wiggle = Math.sin(t * Math.PI * 2.5) * (pressureJitter * 0.6) + (random() - 0.5) * (pressureJitter * 0.4);
+          const y = targetY + baseDrift + wiggle;
+          
+          if (first) {
+            octx.moveTo(x, y);
+            first = false;
+          } else {
+            octx.lineTo(x, y);
+          }
+        }
+        
+        const finalY = targetY + endJitterY + (random() - 0.5) * (pressureJitter * 0.4);
+        octx.lineTo(eX, finalY);
+        octx.stroke();
+        lastColor = "";
+      };
+
+      // Draw continuous underlines
+      let ulSX: number | null = null, ulEX = 0, ulY = 0, ulSize = settings.fontSize, ulColor = "";
+      for (const g of line.glyphs) {
+        const gSize = g.fontSize || settings.fontSize;
+        const gColor = g.color || lColor;
+        if (g.underline) {
+          if (ulSX === null) {
+            ulSX = g.x;
+            ulSize = gSize;
+            ulColor = gColor;
+            ulY = g.y;
+          }
+          ulEX = g.x + measureChar(g.char, g.bold, g.italic, g.fontSize);
+          ulSize = Math.max(ulSize, gSize);
+        } else {
+          if (ulSX !== null) {
+            drawHandwrittenLine(ulSX, ulEX, ulY, ulSize, ulColor, true);
+            ulSX = null;
+          }
+        }
+      }
+      if (ulSX !== null) drawHandwrittenLine(ulSX, ulEX, ulY, ulSize, ulColor, true);
+
+      // Draw continuous strikethroughs
+      let stSX: number | null = null, stEX = 0, stY = 0, stSize = settings.fontSize, stColor = "";
+      for (const g of line.glyphs) {
+        const gSize = g.fontSize || settings.fontSize;
+        const gColor = g.color || lColor;
+        if (g.strikethrough) {
+          if (stSX === null) {
+            stSX = g.x;
+            stSize = gSize;
+            stColor = gColor;
+            stY = g.y;
+          }
+          stEX = g.x + measureChar(g.char, g.bold, g.italic, g.fontSize);
+          stSize = Math.max(stSize, gSize);
+        } else {
+          if (stSX !== null) {
+            drawHandwrittenLine(stSX, stEX, stY, stSize, stColor, false);
+            stSX = null;
+          }
+        }
+      }
+      if (stSX !== null) drawHandwrittenLine(stSX, stEX, stY, stSize, stColor, false);
     }
     return offscreen;
   };

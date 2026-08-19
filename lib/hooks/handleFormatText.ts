@@ -1,67 +1,39 @@
 import { useState, useRef } from "react";
 
-export function useFormatText() {
+export function useFormatText(baseFontSize: number = 28) {
     const [hasSelection, setHasSelection] = useState(false);
     const textareaRef = useRef<HTMLElement | null>(null);
+    const savedRangeRef = useRef<Range | null>(null);
     const [activeFormats, setActiveFormats] = useState({
-        bold: false,
-        italic: false,
-        underline: false,
-        strikethrough: false,
-        highlight: false,
-        center: false,
+        bold: false, italic: false, underline: false,
+        strikethrough: false, highlight: false, center: false,
     });
 
-    const isSelectionCentered = (): boolean => {
+    const checkFormat = (checkNode: (el: HTMLElement) => boolean): boolean => {
         if (typeof window === "undefined") return false;
-        try {
-            if (document.queryCommandState("justifyCenter")) return true;
-        } catch {}
         const sel = window.getSelection();
         if (!sel || sel.rangeCount === 0) return false;
 
         let node: Node | null = sel.getRangeAt(0).commonAncestorContainer;
-        if (node && node.nodeType === Node.TEXT_NODE) {
-            node = node.parentNode;
-        }
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
 
         while (node && node !== textareaRef.current) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                const el = node as HTMLElement;
-                const align = el.style.textAlign || el.getAttribute("align");
-                if (el.tagName.toLowerCase() === "center" || align === "center") {
-                    return true;
-                }
-            }
+            if (node.nodeType === Node.ELEMENT_NODE && checkNode(node as HTMLElement)) return true;
             node = node.parentNode;
         }
         return false;
     };
 
-    const isSelectionHighlighted = (): boolean => {
-        if (typeof window === "undefined") return false;
-        const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return false;
+    const isSelectionCentered = () => {
+        try { if (document.queryCommandState("justifyCenter")) return true; } catch { }
+        return checkFormat(el => el.tagName.toLowerCase() === "center" || el.style.textAlign === "center" || el.getAttribute("align") === "center");
+    };
 
-        let node: Node | null = sel.getRangeAt(0).commonAncestorContainer;
-        if (node && node.nodeType === Node.TEXT_NODE) {
-            node = node.parentNode;
-        }
-
-        while (node && node !== textareaRef.current) {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-                const el = node as HTMLElement;
-                const bg = el.style.backgroundColor || el.style.background || el.getAttribute("bgcolor");
-                if (
-                    el.tagName.toLowerCase() === "mark" ||
-                    (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "none")
-                ) {
-                    return true;
-                }
-            }
-            node = node.parentNode;
-        }
-        return false;
+    const isSelectionHighlighted = () => {
+        return checkFormat(el => {
+            const bg = el.style.backgroundColor || el.style.background || el.getAttribute("bgcolor");
+            return el.tagName.toLowerCase() === "mark" || (!!bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "none");
+        });
     };
 
     const updateActiveFormats = () => {
@@ -80,6 +52,10 @@ export function useFormatText() {
         setHasSelection(hasSel);
         textareaRef.current = element;
         updateActiveFormats();
+        const sel = window.getSelection();
+        if (hasSel && sel && sel.rangeCount > 0) {
+            savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+        }
     };
 
     const handleFormatText = (tag: string, value?: string) => {
@@ -87,52 +63,77 @@ export function useFormatText() {
         if (!element) return;
 
         element.focus();
-
-        if (tag === "b") {
-            document.execCommand("bold", false);
-        } else if (tag === "i") {
-            document.execCommand("italic", false);
-        } else if (tag === "u") {
-            document.execCommand("underline", false);
-        } else if (tag === "s") {
-            document.execCommand("strikeThrough", false);
-        } else if (tag === "center") {
-            const isCurrentlyCentered = isSelectionCentered();
-            if (isCurrentlyCentered) {
-                document.execCommand("justifyLeft", false);
-            } else {
-                document.execCommand("justifyCenter", false);
-            }
-        } else if (tag === "h") {
-            const isCurrentlyHighlighted = isSelectionHighlighted();
-            if (isCurrentlyHighlighted) {
-                try {
-                    document.execCommand("hiliteColor", false, "transparent");
-                } catch {
-                    document.execCommand("backColor", false, "transparent");
-                }
-            } else {
-                try {
-                    document.execCommand("hiliteColor", false, "#fef08a");
-                } catch {
-                    document.execCommand("backColor", false, "#fef08a");
-                }
-            }
-        } else if (tag === "color") {
-            document.execCommand("foreColor", false, value);
+        const sel = window.getSelection();
+        if (savedRangeRef.current && sel) {
+            sel.removeAllRanges();
+            sel.addRange(savedRangeRef.current);
         }
 
-        // Trigger input event to update React state
-        const event = new Event("input", { bubbles: true });
-        element.dispatchEvent(event);
+        const exec = (cmd: string, val?: string) => document.execCommand(cmd, false, val);
+
+        switch (tag) {
+            case "b": exec("bold"); break;
+            case "i": exec("italic"); break;
+            case "u": exec("underline"); break;
+            case "s": exec("strikeThrough"); break;
+            case "center": exec(isSelectionCentered() ? "justifyLeft" : "justifyCenter"); break;
+            case "h": const color = isSelectionHighlighted() ? "transparent" : "#fef08a";
+                try { exec("hiliteColor", color); } catch { exec("backColor", color); }
+                break;
+            case "color": exec("foreColor", value); break;
+            case "size":
+            case "size-inc":
+            case "size-dec":
+                if (!sel || sel.rangeCount === 0 || sel.getRangeAt(0).collapsed) break;
+
+                let targetSize = value ? parseInt(value, 10) : 18;
+                if (!value) {
+                    const container = sel.getRangeAt(0).commonAncestorContainer;
+                    let parentEl = container.nodeType === Node.ELEMENT_NODE ? container as HTMLElement : container.parentElement;
+                    let currentSize = baseFontSize;
+
+                    while (parentEl && parentEl !== element) {
+                        const dataSize = parentEl.getAttribute("data-size");
+                        if (dataSize) {
+                            currentSize = parseInt(dataSize, 10);
+                            break;
+                        }
+                        if (parentEl.style.fontSize) {
+                            const uiSize = parseInt(parentEl.style.fontSize, 10);
+                            if (!isNaN(uiSize)) {
+                                currentSize = Math.round(uiSize * (baseFontSize / 14));
+                                break;
+                            }
+                        }
+                        parentEl = parentEl.parentElement;
+                    }
+
+                    targetSize = tag === "size-inc" ? Math.min(64, currentSize + 2) : Math.max(12, currentSize - 2);
+                }
+
+                exec("styleWithCSS", "false");
+                exec("fontSize", "7");
+
+                const uiSize = Math.round(targetSize * (14 / baseFontSize));
+                element.querySelectorAll('font[size="7"], span[style*="xxx-large"], span[style*="7"]').forEach((el) => {
+                    el.removeAttribute("size");
+                    (el as HTMLElement).style.fontSize = `${uiSize}px`;
+                    el.setAttribute("data-size", targetSize.toString());
+                    el.querySelectorAll("*").forEach(desc => {
+                        if (desc instanceof HTMLElement && desc.style.fontSize) {
+                            desc.style.fontSize = "";
+                            desc.removeAttribute("data-size");
+                            if (!desc.getAttribute("style")) desc.removeAttribute("style");
+                        }
+                    });
+                });
+                exec("styleWithCSS", "true");
+                break;
+        }
+
+        element.dispatchEvent(new Event("input", { bubbles: true }));
         updateActiveFormats();
     };
 
-    return {
-        hasSelection,
-        activeFormats,
-        handleSelectionChange,
-        handleFormatText,
-        textareaRef,
-    };
+    return { hasSelection, activeFormats, handleSelectionChange, handleFormatText, textareaRef };
 }
