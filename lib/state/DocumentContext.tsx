@@ -11,12 +11,15 @@ interface DocumentContextType {
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
 
+const STORAGE_KEY = "assignment_creator_doc";
+const SAVE_DEBOUNCE_MS = 800;
+
 export function DocumentProvider({ children }: { children: ReactNode }) {
   const [doc, dispatch] = useReducer(documentReducer, undefined, createDefaultDocument);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem("assignment_creator_doc");
+    const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -31,9 +34,28 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem("assignment_creator_doc", JSON.stringify(doc));
-    }
+    if (!isLoaded) return;
+    let saved = false;
+    const save = () => {
+      if (saved) return;
+      saved = true;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
+      } catch (e) {
+        console.error("Failed to save document to localStorage (storage quota may be exceeded)", e);
+      }
+    };
+    // Debounced off the keystroke path; flushed when the tab is hidden or
+    // closed so the pending edit is not lost.
+    const timer = setTimeout(save, SAVE_DEBOUNCE_MS);
+    const onVisibilityChange = () => { if (document.visibilityState === "hidden") save(); };
+    window.addEventListener("pagehide", save);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pagehide", save);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, [doc, isLoaded]);
 
   return (

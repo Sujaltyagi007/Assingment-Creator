@@ -10,12 +10,25 @@ import { createDefaultDocument, documentReducer, syncIdCounter } from "@/lib/sta
 import { renderPageToCanvas, PAGE_WIDTH_PX, PAGE_HEIGHT_PX } from "@/lib/render/canvasBackend";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
+// Thumbnails are ~64px wide, so render them at a fraction of page resolution,
+// and on a trailing throttle so continuous typing repaints them at most once
+// per interval instead of on every keystroke.
+const THUMBNAIL_SCALE = 0.25;
+const THUMBNAIL_THROTTLE_MS = 300;
+
 function PageThumbnail({ page, pageIndex, settings, fontFamily, globalTextContent, isActive, onClick, onDelete, canDelete }: any) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastRenderTime = useRef(0);
   useEffect(() => {
-    if (canvasRef.current && fontFamily) {
-      renderPageToCanvas(canvasRef.current, page, settings, fontFamily, globalTextContent, pageIndex);
-    }
+    if (!canvasRef.current || !fontFamily) return;
+    const delay = Math.max(0, THUMBNAIL_THROTTLE_MS - (Date.now() - lastRenderTime.current));
+    const timer = setTimeout(() => {
+      lastRenderTime.current = Date.now();
+      if (canvasRef.current) {
+        renderPageToCanvas(canvasRef.current, page, settings, fontFamily, globalTextContent, pageIndex, undefined, THUMBNAIL_SCALE);
+      }
+    }, delay);
+    return () => clearTimeout(timer);
   }, [page, settings, fontFamily, globalTextContent, pageIndex]);
 
   return (

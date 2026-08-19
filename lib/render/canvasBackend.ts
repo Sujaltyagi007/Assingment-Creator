@@ -1,9 +1,20 @@
 import type { GlobalSettings, Page } from "@/lib/types";
 import { mulberry32 } from "@/lib/handwriting/jitter";
-import { getMargins, layoutText } from "@/lib/render/layout";
+import { getMargins, layoutText, LayoutLine } from "@/lib/render/layout";
 
 export const PAGE_WIDTH_PX = 794;
 export const PAGE_HEIGHT_PX = 1123;
+
+const imageCache = new Map<string, HTMLImageElement>();
+
+// Full-page offscreen canvases are ~3.5MB each; cap the cache so typing
+// (which mints new keys every keystroke) cannot grow memory unboundedly.
+const textCache = new Map<string, HTMLCanvasElement>();
+const MAX_TEXT_CACHE_ENTRIES = 30;
+
+// Layout covers the whole document, so every page (main canvas + each
+// thumbnail) shares one computation per content/settings change.
+let layoutMemo: { key: string; lines: LayoutLine[] } | null = null;
 
 function drawRuledPaper(ctx: CanvasRenderingContext2D, settings: GlobalSettings) {
   ctx.fillStyle = "#ffffff";
@@ -182,11 +193,13 @@ export function renderPageToCanvas(
   fontFamily: string,
   globalTextContent: string = "",
   pageIndex: number = 0,
-  targetSrcIndex?: number | null
+  targetSrcIndex?: number | null,
+  scale: number = 1
 ): { maxRequiredPages: number, targetPageIndex?: number } {
-  canvas.width = PAGE_WIDTH_PX; canvas.height = PAGE_HEIGHT_PX;
+  canvas.width = Math.round(PAGE_WIDTH_PX * scale); canvas.height = Math.round(PAGE_HEIGHT_PX * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) return { maxRequiredPages: 1 };
+  if (scale !== 1) ctx.setTransform(scale, 0, 0, scale, 0, 0);
   drawPaperBackground(ctx, settings);
   drawAntiCopyPattern(ctx, settings);
   drawWatermark(ctx, settings, fontFamily);
@@ -200,8 +213,6 @@ export function renderPageToCanvas(
   };
 
   const margins = getMargins(settings.marginPreset);
-
-  const imageCache = (globalThis as any).__canvasImageCache || ((globalThis as any).__canvasImageCache = new Map<string, HTMLImageElement>());
 
   for (const el of page.elements) {
     if (el.type === "image") {
@@ -222,12 +233,22 @@ export function renderPageToCanvas(
     }
   }
 
-  const lines = layoutText({
-    content: globalTextContent, fontSize: settings.fontSize, lineSpacing: settings.lineSpacing,
-    pageWidth: PAGE_WIDTH_PX, pageHeight: PAGE_HEIGHT_PX,
-    margins: { ...margins, left: settings.leftMargin ?? 105, top: settings.topMargin ?? 105, right: 20 },
-    measureChar, wordSpacing: settings.wordSpacing ?? 1.0,
-  });
+  const layoutKey = JSON.stringify([
+    globalTextContent, fontFamily, settings.fontSize, settings.lineSpacing,
+    settings.wordSpacing ?? 1.0, settings.marginPreset, settings.leftMargin ?? 105, settings.topMargin ?? 105,
+  ]);
+  let lines: LayoutLine[];
+  if (layoutMemo && layoutMemo.key === layoutKey) {
+    lines = layoutMemo.lines;
+  } else {
+    lines = layoutText({
+      content: globalTextContent, fontSize: settings.fontSize, lineSpacing: settings.lineSpacing,
+      pageWidth: PAGE_WIDTH_PX, pageHeight: PAGE_HEIGHT_PX,
+      margins: { ...margins, left: settings.leftMargin ?? 105, top: settings.topMargin ?? 105, right: 20 },
+      measureChar, wordSpacing: settings.wordSpacing ?? 1.0,
+    });
+    layoutMemo = { key: layoutKey, lines };
+  }
 
   const renderTextToOffscreen = (): HTMLCanvasElement => {
     const offscreen = document.createElement("canvas");
@@ -391,12 +412,16 @@ export function renderPageToCanvas(
     return offscreen;
   };
 
-  const cacheKey = `${globalTextContent}_${pageIndex}_${fontFamily}_${settings.fontSize}_${settings.lineSpacing}_${settings.wordSpacing}_${settings.inkColor}_${settings.realism.seed}_${settings.realism.jitterX}_${settings.realism.jitterY}_${settings.realism.slant}_${settings.realism.pressureVariance}`;
-  const textCache = (globalThis as any).__canvasTextCache || ((globalThis as any).__canvasTextCache = new Map<string, HTMLCanvasElement>());
+  const cacheKey = `${globalTextContent}_${pageIndex}_${fontFamily}_${settings.fontSize}_${settings.lineSpacing}_${settings.wordSpacing}_${settings.inkColor}_${settings.marginPreset}_${settings.leftMargin ?? 105}_${settings.topMargin ?? 105}_${settings.smartQA}_${settings.autoHeadings}_${settings.realism.seed}_${settings.realism.jitterX}_${settings.realism.jitterY}_${settings.realism.slant}_${settings.realism.pressureVariance}`;
   let offscreenCanvas = textCache.get(cacheKey);
   if (!offscreenCanvas && typeof window !== "undefined") {
     offscreenCanvas = renderTextToOffscreen();
     textCache.set(cacheKey, offscreenCanvas);
+    while (textCache.size > MAX_TEXT_CACHE_ENTRIES) {
+      const oldestKey = textCache.keys().next().value;
+      if (oldestKey === undefined) break;
+      textCache.delete(oldestKey);
+    }
   }
 
   if (offscreenCanvas) {

@@ -29,13 +29,33 @@ function bbcodeToHtml(text: string, baseFontSize: number = 28): string {
         .replace(/\[\/color\]/g, "</span>").replace(/\n/g, "<br>");
 }
 
+const BLOCK_TAGS = ["div", "p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "ul", "ol"];
+
+const isFormattingBoundary = (n: Node | null): boolean => {
+    if (!n) return true;
+    if (n.nodeType !== Node.ELEMENT_NODE) return false;
+    const tag = (n as HTMLElement).tagName.toLowerCase();
+    return tag === "br" || BLOCK_TAGS.includes(tag);
+};
+
 function htmlToBbcode(html: string, baseFontSize: number = 28): string {
     if (typeof document === "undefined") return html;
     const temp = document.createElement("div");
     temp.innerHTML = html;
 
     const parseNode = (node: Node): string => {
-        if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+        if (node.nodeType === Node.TEXT_NODE) {
+            const raw = node.textContent || "";
+            // Clipboard HTML carries formatting newlines between tags that the
+            // browser renders as collapsed whitespace, never as line breaks;
+            // treat them the same so pasting doesn't create gaps. The editor's
+            // own DOM never holds "\n" in text nodes (Enter makes divs/br),
+            // so typed content is untouched.
+            if (!raw.includes("\n")) return raw;
+            const collapsed = raw.replace(/[ \t]*\n[ \t]*/g, " ");
+            if (collapsed.trim() !== "") return collapsed;
+            return isFormattingBoundary(node.previousSibling) || isFormattingBoundary(node.nextSibling) ? "" : " ";
+        }
         if (node.nodeType === Node.ELEMENT_NODE) {
             const el = node as HTMLElement;
             let text = "";
@@ -69,8 +89,15 @@ function htmlToBbcode(html: string, baseFontSize: number = 28): string {
             if (sizeVal) fText = `[size=${sizeVal}]${fText}[/size]`;
             if (isCenter && fText.trim()) fText = `[center]${fText}[/center]`;
             if (tag === "br") return "\n";
-            if (tag === "div" || tag === "p") {
-                if (fText === "\n") return "\n";
+            
+            const isBlock = BLOCK_TAGS.includes(tag);
+            if (isBlock) {
+                // Strip trailing newline inside block element (e.g. from trailing <br>)
+                fText = fText.replace(/\n$/, "");
+                // Pasted content nests blocks (<div><p>…</p></div>, <ul><li>…);
+                // the inner block already contributed its line break, so adding
+                // another would render blank lines the source doesn't have.
+                if (fText.startsWith("\n")) return fText;
                 return fText ? "\n" + fText : "\n";
             }
             return fText;
@@ -80,14 +107,22 @@ function htmlToBbcode(html: string, baseFontSize: number = 28): string {
 
     let bbcode = "";
     temp.childNodes.forEach(child => { bbcode += parseNode(child); });
-    return bbcode.replace(/^\n/, "");
+    // The first block always contributes a leading "\n", and pasted fragments
+    // can leave additional blank lines (leading <br>, leftover empty divs,
+    // spaces-only text nodes) above the real content; drop them all so the
+    // text starts on the first line of the page.
+    return bbcode.replace(/^(?:[ \t]*\n)+/, "");
 }
 
 export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectionChange, onAddImage, onFormatText, baseFontSize = 28 }: HomeTextAreaProps) => {
     const editableRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    // Bbcode last emitted from handleInput; when the prop echoes it back, the
+    // editor DOM is already in sync and the expensive re-parse can be skipped.
+    const lastEmittedRef = useRef<string | null>(null);
+    useEffect(() => { lastEmittedRef.current = null; }, [baseFontSize]);
     useEffect(() => {
-        if (editableRef.current) {
+        if (editableRef.current && content !== lastEmittedRef.current) {
             const currentHtml = editableRef.current.innerHTML;
             const expectedHtml = bbcodeToHtml(content, baseFontSize);
             if (htmlToBbcode(currentHtml, baseFontSize) !== content) { editableRef.current.innerHTML = expectedHtml; }
@@ -95,7 +130,11 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
     }, [content, baseFontSize]);
 
     const handleInput = useCallback(() => {
-        if (editableRef.current) onContentChange(htmlToBbcode(editableRef.current.innerHTML, baseFontSize));
+        if (editableRef.current) {
+            const bbcode = htmlToBbcode(editableRef.current.innerHTML, baseFontSize);
+            lastEmittedRef.current = bbcode;
+            onContentChange(bbcode);
+        }
     }, [onContentChange, baseFontSize]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {

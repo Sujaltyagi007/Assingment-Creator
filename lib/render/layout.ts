@@ -59,9 +59,6 @@ interface StyledChar {
   fontSize?: number;
 }
 
-/**
- * Parses BBCode style formatting: [b], [i], [u], [h], [s], [center], [color=#hex], [size=N]
- */
 function parseStyledText(content: string): StyledChar[] {
   const chars: StyledChar[] = [];
   let b = false, i = false, u = false, h = false, s = false, align: "left" | "center" = "left";
@@ -109,10 +106,24 @@ function parseStyledText(content: string): StyledChar[] {
 
 const LIST_PREFIX_REGEX = /^\s*(\([a-zA-Z0-9ivxlcdmIVXLCDM]+\.?\)|\d{1,3}[\.\)]+|[a-zA-Z][\.\)]+|[ivxlcdmIVXLCDM]{1,4}[\.\)]+|[•\-\*\>])(\s*)/;
 
+const SUPERSCRIPTS: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', 
+  '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+  '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾', 'n': 'ⁿ'
+};
+
 export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
-  const { content, fontSize, lineSpacing, pageWidth, pageHeight, margins, measureChar, wordSpacing = 1.0 } = opts;
+  let { content } = opts;
+  content = content.replace(/\r/g, ""); 
+  content = content.replace(/\t/g, "    ");
+  content = content.replace(/\n{3,}/g, "\n\n");
+  content = content.replace(/\^([0-9+\-=()n]+)/g, (_, p1) => {
+    return p1.split('').map((c: string) => SUPERSCRIPTS[c] || c).join('');
+  });
+
+  const { fontSize, lineSpacing, pageWidth, pageHeight, margins, measureChar, wordSpacing = 1.0 } = opts;
   const maxW = pageWidth - margins.left - margins.right, lineH = fontSize * lineSpacing, lines: LayoutLine[] = [];
-  let curY = margins.top + fontSize, pageIdx = 0;
+  let curY = margins.top + fontSize + lineH, pageIdx = 0;
 
   const cache = new Map<string, number>();
   const getW = (c: {char: string, bold?: boolean, italic?: boolean, fontSize?: number}) => {
@@ -129,7 +140,7 @@ export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
       line.forEach(g => g.x += shiftX);
     }
     lines.push({ glyphs: line, pageIndex: pageIdx });
-    if ((curY += lineH) > pageHeight - margins.bottom) { curY = margins.top + fontSize; pageIdx++; }
+    if ((curY += lineH) > pageHeight - margins.bottom) { curY = margins.top + fontSize + lineH; pageIdx++; }
   };
 
   const paras: StyledChar[][] = [[]];
