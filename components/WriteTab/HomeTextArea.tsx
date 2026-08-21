@@ -217,13 +217,14 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                         replacement.setAttribute("data-size", size.toString());
                         replacement.innerHTML = el.innerHTML;
                     }
-                    // Map lists to text bullets
+                    // Map lists to text bullets — use <span> (inline) so prefix + content
+                    // stays on one line; the outer <ul>/<ol>→<div> provides the block break.
                     else if (tag === 'li') {
                         const isOrdered = el.closest('ol') !== null;
                         const index = isOrdered ? Array.from(el.parentNode?.children || []).indexOf(el) + 1 : null;
-                        replacement = document.createElement('div');
+                        replacement = document.createElement('span');
                         const prefix = isOrdered ? `${index}. ` : `• `;
-                        replacement.innerHTML = prefix + el.innerHTML;
+                        replacement.innerHTML = prefix + el.innerHTML.trim();
                     }
                     // Flatten tables
                     else if (tag === 'table') {
@@ -254,7 +255,14 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
 
             doc.querySelectorAll('ul, ol').forEach(el => {
                 const newEl = document.createElement('div');
-                newEl.innerHTML = el.innerHTML;
+                // Each <li> was replaced with a <span>; join them with <br> so each
+                // list item lands on its own line in the output.
+                const items = Array.from(el.querySelectorAll('span'));
+                if (items.length > 0) {
+                    newEl.innerHTML = items.map(s => s.outerHTML).join('<br>');
+                } else {
+                    newEl.innerHTML = el.innerHTML;
+                }
                 el.replaceWith(newEl);
             });
 
@@ -309,36 +317,106 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
     const [findText, setFindText] = useState("");
     const [replaceText, setReplaceText] = useState("");
 
+    const getEditorTextMapping = () => {
+        const root = editableRef.current;
+        if (!root) return null;
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+        let node;
+        let text = "";
+        const mapping: { node: Node; offset: number }[] = [];
+        while ((node = walker.nextNode())) {
+            const val = node.nodeValue || "";
+            for (let i = 0; i < val.length; i++) {
+                mapping.push({ node, offset: i });
+            }
+            text += val;
+        }
+        return { text, mapping };
+    };
+
     const handleFind = () => {
-        if (!findText) return;
-        window.find(findText, false, false, true, false, false, false);
+        if (!findText || !editableRef.current) return;
+        
+        let startIndex = 0;
+        const sel = window.getSelection();
+        const mapData = getEditorTextMapping();
+        if (!mapData || mapData.mapping.length === 0) return;
+        const { text, mapping } = mapData;
+        
+        if (sel && sel.rangeCount > 0 && editableRef.current.contains(sel.anchorNode)) {
+            const range = sel.getRangeAt(0);
+            const index = mapping.findIndex(m => m.node === range.endContainer && m.offset === range.endOffset);
+            if (index !== -1) startIndex = index;
+        }
+        
+        let matchIndex = text.toLowerCase().indexOf(findText.toLowerCase(), startIndex);
+        if (matchIndex === -1 && startIndex > 0) {
+            matchIndex = text.toLowerCase().indexOf(findText.toLowerCase(), 0);
+        }
+        
+        if (matchIndex !== -1) {
+            const startMap = mapping[matchIndex];
+            const endMap = matchIndex + findText.length < mapping.length 
+                ? mapping[matchIndex + findText.length] 
+                : { node: mapping[mapping.length-1].node, offset: mapping[mapping.length-1].node.nodeValue!.length };
+            
+            const newRange = document.createRange();
+            newRange.setStart(startMap.node, startMap.offset);
+            newRange.setEnd(endMap.node, endMap.offset);
+            
+            sel?.removeAllRanges();
+            sel?.addRange(newRange);
+            
+            if (startMap.node.parentElement) {
+                startMap.node.parentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
     };
 
     const handleReplace = () => {
-        if (!findText) return;
+        if (!findText || !editableRef.current) return;
         const sel = window.getSelection();
-        if (sel && sel.rangeCount > 0 && sel.toString().toLowerCase() === findText.toLowerCase()) {
-            document.execCommand("insertText", false, replaceText);
+        if (sel && sel.rangeCount > 0) {
+            const selText = sel.toString();
+            if (selText.toLowerCase() === findText.toLowerCase() && editableRef.current.contains(sel.anchorNode)) {
+                document.execCommand("insertText", false, replaceText);
+                editableRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+            }
         }
-        window.find(findText, false, false, true, false, false, false);
+        handleFind();
     };
 
     const handleReplaceAll = () => {
         if (!findText || !editableRef.current) return;
         let count = 0;
-
-        // Reset selection to start
-        const sel = window.getSelection();
-        if (sel) sel.removeAllRanges();
-
-        const range = document.createRange();
-        range.selectNodeContents(editableRef.current);
-        range.collapse(true);
-        if (sel) sel.addRange(range);
-
-        while (window.find(findText, false, false, true, false, false, false)) {
+        let mapData = getEditorTextMapping();
+        
+        while (mapData && mapData.mapping.length > 0) {
+            const { text, mapping } = mapData;
+            const matchIndex = text.toLowerCase().indexOf(findText.toLowerCase());
+            if (matchIndex === -1) break;
+            
+            const startMap = mapping[matchIndex];
+            const endMap = matchIndex + findText.length < mapping.length 
+                ? mapping[matchIndex + findText.length] 
+                : { node: mapping[mapping.length-1].node, offset: mapping[mapping.length-1].node.nodeValue!.length };
+                
+            const newRange = document.createRange();
+            newRange.setStart(startMap.node, startMap.offset);
+            newRange.setEnd(endMap.node, endMap.offset);
+            
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(newRange);
+            
             document.execCommand("insertText", false, replaceText);
             count++;
+            
+            mapData = getEditorTextMapping();
+        }
+        
+        if (count > 0) {
+            editableRef.current.dispatchEvent(new Event("input", { bubbles: true }));
         }
     };
 

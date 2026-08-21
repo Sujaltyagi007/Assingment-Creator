@@ -7,6 +7,7 @@ export function useFormatText(baseFontSize: number = 28) {
     const [activeFormats, setActiveFormats] = useState({
         bold: false, italic: false, underline: false,
         strikethrough: false, highlight: false, center: false,
+        alignLeft: false, alignRight: false,
         superscript: false, subscript: false,
     });
 
@@ -30,6 +31,16 @@ export function useFormatText(baseFontSize: number = 28) {
         return checkFormat(el => el.tagName.toLowerCase() === "center" || el.style.textAlign === "center" || el.getAttribute("align") === "center");
     };
 
+    const isSelectionRight = () => {
+        try { if (document.queryCommandState("justifyRight")) return true; } catch { }
+        return checkFormat(el => el.style.textAlign === "right" || el.getAttribute("align") === "right");
+    };
+
+    const isSelectionLeft = () => {
+        try { if (document.queryCommandState("justifyLeft")) return true; } catch { }
+        return checkFormat(el => el.style.textAlign === "left" || el.getAttribute("align") === "left");
+    };
+
     const isSelectionHighlighted = () => {
         return checkFormat(el => {
             const bg = el.style.backgroundColor || el.style.background || el.getAttribute("bgcolor");
@@ -39,13 +50,17 @@ export function useFormatText(baseFontSize: number = 28) {
 
     const updateActiveFormats = () => {
         if (typeof document === "undefined") return;
+        const centered = isSelectionCentered();
+        const right = isSelectionRight();
         setActiveFormats({
             bold: document.queryCommandState("bold"),
             italic: document.queryCommandState("italic"),
             underline: document.queryCommandState("underline"),
             strikethrough: document.queryCommandState("strikeThrough"),
             highlight: isSelectionHighlighted(),
-            center: isSelectionCentered(),
+            center: centered,
+            alignLeft: !centered && !right,
+            alignRight: right,
             superscript: document.queryCommandState("superscript"),
             subscript: document.queryCommandState("subscript"),
         });
@@ -82,6 +97,8 @@ export function useFormatText(baseFontSize: number = 28) {
             case "sup": exec("superscript"); break;
             case "sub": exec("subscript"); break;
             case "center": exec(isSelectionCentered() ? "justifyLeft" : "justifyCenter"); break;
+            case "align-left": exec("justifyLeft"); break;
+            case "align-right": exec("justifyRight"); break;
             case "h": const color = isSelectionHighlighted() ? "transparent" : "#fef08a";
                 try { exec("hiliteColor", color); } catch { exec("backColor", color); }
                 break;

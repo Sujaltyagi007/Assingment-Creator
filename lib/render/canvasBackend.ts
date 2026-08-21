@@ -483,9 +483,8 @@ export function renderPageToCanvas(
       }
       if (targetPageIndex !== undefined) break;
     }
-    if (targetPageIndex === undefined && lines.length > 0) {
-      targetPageIndex = lines[lines.length - 1].pageIndex;
-    }
+    // No fallback: if no glyph matches (e.g. cursor past end of text after
+    // font-size reflow), return undefined so the active page is not changed.
   }
 
   return {
