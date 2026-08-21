@@ -57,6 +57,10 @@ export default function Editor() {
   } = useEditorLogic();
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      return;
+    }
     if ((e.key === "Delete" || e.key === "Backspace") && isHoveringCanvas) {
       e.preventDefault(); deleteSelectedImage();
     }

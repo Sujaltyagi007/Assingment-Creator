@@ -215,9 +215,7 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                         const size = Math.max(16, Math.round(48 - ((level - 1) * 5)));
                         replacement = document.createElement('div');
                         replacement.setAttribute("data-size", size.toString());
-                        const b = document.createElement('b');
-                        b.innerHTML = el.innerHTML;
-                        replacement.appendChild(b);
+                        replacement.innerHTML = el.innerHTML;
                     }
                     // Map lists to text bullets
                     else if (tag === 'li') {
@@ -235,47 +233,25 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                         }).join("<br/>");
                         replacement.innerHTML = tableText;
                     }
-                    // Strip link logic but keep text
-                    else if (tag === 'a') {
+                    else if (tag === 'a' || tag === 'b' || tag === 'strong') {
                         replacement = document.createElement('span');
                         replacement.innerHTML = el.innerHTML;
                     }
 
                     const target = replacement || el;
-                    if (replacement) {
-                        el.replaceWith(replacement);
-                    }
+                    if (replacement) { el.replaceWith(replacement); }
+                    Array.from(target.attributes).forEach(attr => { target.removeAttribute(attr.name); });
+                    if (ds || replacement?.getAttribute("data-size")) { target.setAttribute("data-size", ds || replacement!.getAttribute("data-size")!); }
+                    if (fs === 'italic' || tag === 'i' || tag === 'em') { target.style.fontStyle = 'italic'; }
+                    if (td.includes('line-through') || tag === 's' || tag === 'strike' || tag === 'del') { target.style.textDecoration = 'line-through'; }
+                    if (td.includes('underline') || tag === 'u') { target.style.textDecoration = 'underline'; }
 
-                    // Aggressively strip all attributes (class, id, margin, etc.)
-                    Array.from(target.attributes).forEach(attr => {
-                        target.removeAttribute(attr.name);
-                    });
-
-                    // Restore semantic styles/attributes
-                    if (ds || replacement?.getAttribute("data-size")) {
-                        target.setAttribute("data-size", ds || replacement!.getAttribute("data-size")!);
-                    }
-                    if (fw === 'bold' || parseInt(fw) >= 700 || tag === 'b' || tag === 'strong') {
-                        target.style.fontWeight = 'bold';
-                    }
-                    if (fs === 'italic' || tag === 'i' || tag === 'em') {
-                        target.style.fontStyle = 'italic';
-                    }
-                    if (td.includes('line-through') || tag === 's' || tag === 'strike' || tag === 'del') {
-                        target.style.textDecoration = 'line-through';
-                    }
-                    if (td.includes('underline') || tag === 'u') {
-                        target.style.textDecoration = 'underline';
-                    }
-
-                    // Recurse children safely
                     Array.from(target.childNodes).forEach(cleanNode);
                 }
             };
 
             Array.from(doc.body.childNodes).forEach(cleanNode);
 
-            // Final pass: clean up list wrappers since LI's are now DIVs
             doc.querySelectorAll('ul, ol').forEach(el => {
                 const newEl = document.createElement('div');
                 newEl.innerHTML = el.innerHTML;
@@ -390,7 +366,7 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
         <div className="flex-1 flex flex-col rounded-2xl bg-zinc-50 border border-zinc-200 dark:bg-[#13131a] dark:border-[#232330] h-full p-4 shadow-inner min-h-62.5 sm:min-h-87.5 relative pb-12 transition-colors duration-200">
             <div ref={editableRef} contentEditable onInput={handleInput} onPaste={handlePaste} onKeyDown={handleKeyDown}
                 onSelect={handleSelect} onKeyUp={handleSelect} onMouseUp={handleSelect} onTouchEnd={handleSelect}
-                spellCheck={autoCorrect} className="w-full flex-1 bg-transparent text-zinc-900 placeholder-zinc-400 dark:text-zinc-100 dark:placeholder-zinc-600 focus:outline-none resize-none font-sans text-sm leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none [&>div]:m-0 [&>div[style*='text-align: center']]:m-0" style={{ minHeight: "150px", fontFamily: fontFamily }}
+                spellCheck={autoCorrect} className="w-full flex-1 bg-transparent text-zinc-900 placeholder-zinc-400 dark:text-zinc-100 dark:placeholder-zinc-600 focus:outline-none resize-none font-sans text-sm leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none [&>div]:m-0 [&>div[style*='text-align: center']]:m-0" style={{ minHeight: "150px" }}
             />
             <div className="absolute bottom-3 left-4 flex items-center gap-2">
                 <input type="file" accept=".svg" className="hidden" ref={fileInputRef} onChange={handleFileChange} />

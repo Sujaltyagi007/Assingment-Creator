@@ -42,13 +42,13 @@ export const MarginCard = ({ onUpdateSettings, settings, applyPreset }: Props) =
             <div className="flex flex-col gap-1">
                 <div className="flex justify-between items-center text-[10px]">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300">Top Margin</span>
-                    <span className="text-zinc-500 font-mono text-[9px]">(Header)</span>
+                    <span className="text-zinc-500 font-mono text-[9px]">{settings.topMargin ?? 105}px (Header)</span>
                 </div>
                 <input
                     type="range"
                     min={40}
                     max={200}
-                    value={settings.topMargin}
+                    value={settings.topMargin ?? 105}
                     onChange={(e) => onUpdateSettings({ topMargin: Number(e.target.value) })}
                     className="modern-range"
                 />
@@ -58,13 +58,13 @@ export const MarginCard = ({ onUpdateSettings, settings, applyPreset }: Props) =
             <div className="flex flex-col gap-1">
                 <div className="flex justify-between items-center text-[10px]">
                     <span className="font-semibold text-zinc-700 dark:text-zinc-300">Left Margin</span>
-                    <span className="text-zinc-500 font-mono text-[9px]">(Holes)</span>
+                    <span className="text-zinc-500 font-mono text-[9px]">{settings.leftMargin ?? 105}px (Holes)</span>
                 </div>
                 <input
                     type="range"
                     min={40}
                     max={250}
-                    value={settings.leftMargin}
+                    value={settings.leftMargin ?? 105}
                     onChange={(e) => onUpdateSettings({ leftMargin: Number(e.target.value) })}
                     className="modern-range"
                 />

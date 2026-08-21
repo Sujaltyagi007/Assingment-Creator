@@ -159,9 +159,9 @@ function drawAntiCopyPattern(ctx: CanvasRenderingContext2D, settings: GlobalSett
   if (!settings.antiCopyPattern) return;
 
   ctx.save();
-  ctx.strokeStyle = "#cccccc";
-  ctx.globalAlpha = 0.08;
-  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = "#888888";
+  ctx.globalAlpha = 0.15;
+  ctx.lineWidth = 1.0;
 
   for (let x = -PAGE_HEIGHT_PX; x < PAGE_WIDTH_PX + PAGE_HEIGHT_PX; x += 25) {
     ctx.beginPath();
@@ -220,7 +220,8 @@ export function renderPageToCanvas(
   globalTextContent: string = "",
   pageIndex: number = 0,
   targetSrcIndex?: number | null,
-  scale: number = 1
+  scale: number = 1,
+  isExport: boolean = false
 ): { maxRequiredPages: number, targetPageIndex?: number } {
   canvas.width = Math.round(PAGE_WIDTH_PX * scale); canvas.height = Math.round(PAGE_HEIGHT_PX * scale);
   const ctx = canvas.getContext("2d");
@@ -231,6 +232,12 @@ export function renderPageToCanvas(
   drawWatermark(ctx, settings, fontFamily);
   drawHeaderFooter(ctx, settings, fontFamily, pageIndex);
 
+  const margins = getMargins(settings.marginPreset);
+  const effectiveLeft = settings.leftMargin ?? 105;
+  const effectiveTop = settings.topMargin ?? 105;
+
+
+
   let lastMeasureFont = "";
   const measureChar = (ch: string, bold?: boolean, italic?: boolean, charFontSize?: number) => {
     const f = `${italic ? "italic " : ""}${bold ? "bold " : ""}${charFontSize || settings.fontSize}px ${fontFamily}`;
@@ -238,7 +245,7 @@ export function renderPageToCanvas(
     return ctx.measureText(ch).width;
   };
 
-  const margins = getMargins(settings.marginPreset);
+
 
   for (const el of page.elements) {
     if (el.type === "image") {
@@ -351,12 +358,12 @@ export function renderPageToCanvas(
         if (g.sup) yOffset = -baseSize * 0.4;
         if (g.sub) yOffset = baseSize * 0.25;
         
+        octx.save();
         octx.translate(g.x + tf.dx, g.y + tf.dy + yOffset);
         if (tf.slant) octx.transform(1, 0, Math.tan(-tf.slant), 1, 0, 0);
         if (tf.rotation) octx.rotate(tf.rotation);
         octx.fillText(g.char, 0, 0);
-
-        octx.setTransform(1, 0, 0, 1, 0, 0);
+        octx.restore();
       }
 
       const drawHandwrittenLine = (sX: number, eX: number, yPos: number, size: number, color: string, isUnderline: boolean) => {

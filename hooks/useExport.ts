@@ -28,7 +28,8 @@ export function useExport(canvasRef: React.RefObject<HTMLCanvasElement | null>, 
         canvas.width = PAGE_WIDTH_PX;
         canvas.height = PAGE_HEIGHT_PX;
         const pageSettings = { ...doc.globalSettings, ...(page.settingsOverride || {}) };
-        renderPageToCanvas(canvas, page, pageSettings, activeFamily, globalTextContent, idx);
+        // Note: targetSrcIndex (7th param) is undefined, scale (8th) is 1, and isExport (9th) is true
+        renderPageToCanvas(canvas, page, pageSettings, activeFamily, globalTextContent, idx, undefined, 1, true);
         return canvas;
       })
     );

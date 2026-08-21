@@ -1,8 +1,3 @@
-/**
- * Zero-dependency PDF assembler.
- * Each canvas is embedded as a JPEG image. Output is a valid multi-page PDF Blob.
- */
-
 const PT_W = 595.28; // A4 width  in PDF user units
 const PT_H = 841.89; // A4 height in PDF user units
 
@@ -19,26 +14,38 @@ function b64ToBytes(b64: string): Uint8Array {
 
 const enc = (s: string) => new TextEncoder().encode(s);
 
-/**
- * Assemble a PDF Blob from an array of canvases (one per page).
- * @param canvases - Rendered page canvases in order.
- * @param highCompression - true = JPEG quality 0.70, false = 0.95
- */
-export async function exportCanvasesToPDF(
-  canvases: HTMLCanvasElement[],
-  highCompression: boolean,
-): Promise<Blob> {
-  // 0.82 is a sweet spot for JPEG where it achieves excellent compression 
-  // without introducing the heavy, unacceptable artifacts seen at 0.70.
-  const quality = highCompression ? 0.82 : 0.98;
+function canvasToRGB(canvas: HTMLCanvasElement): Uint8Array {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return new Uint8Array(0);
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imgData.data;
+  const rgb = new Uint8Array(canvas.width * canvas.height * 3);
+  for (let i = 0, j = 0; i < data.length; i += 4, j += 3) {
+    rgb[j] = data[i];
+    rgb[j + 1] = data[i + 1];
+    rgb[j + 2] = data[i + 2];
+  }
+  return rgb;
+}
 
+async function compressFlate(data: Uint8Array): Promise<Uint8Array | null> {
+  if (typeof CompressionStream === "undefined") { return null }
+  try {
+    const stream = new Response(new Blob([data as BlobPart])).body!.pipeThrough(new CompressionStream("deflate"));
+    const compressedBuffer = await new Response(stream).arrayBuffer();
+    return new Uint8Array(compressedBuffer);
+  } catch (e) {
+    console.error("CompressionStream failed, falling back to JPEG", e);
+    return null;
+  }
+}
+
+export async function exportCanvasesToPDF(canvases: HTMLCanvasElement[], highCompression: boolean): Promise<Blob> {
+  const quality = highCompression ? 0.82 : 0.98;
   const chunks: Uint8Array[] = [];
   let bytePos = 0;
-
   const push = (u: Uint8Array) => { chunks.push(u); bytePos += u.length; };
   const pushStr = (s: string) => push(enc(s));
-
-  // PDF object offsets (1-indexed, offset[i] = byte position of object i+1)
   const offsets: number[] = [];
 
   const beginObj = (id: number) => {
@@ -46,29 +53,41 @@ export async function exportCanvasesToPDF(
     pushStr(`${id} 0 obj\n`);
   };
   const endObj = () => pushStr("endobj\n");
-
   pushStr("%PDF-1.4\n%\xFF\xFF\xFF\xFF\n");
-
   const n = canvases.length;
+  const pageImages = await Promise.all(
+    canvases.map(async (canvas) => {
+      if (!highCompression) {
+        const rgb = canvasToRGB(canvas);
+        const flateBytes = await compressFlate(rgb);
+        if (flateBytes) {
+          return {
+            bytes: flateBytes,
+            filter: "/FlateDecode",
+            width: canvas.width,
+            height: canvas.height,
+          };
+        }
+      }
 
-  // Object id plan:
-  //   1        = catalog
-  //   2        = page tree
-  //   3..2+n   = page dicts         (pageId = 3 + i)
-  //   3+n..2+2n = image XObjects    (imgId  = 3 + n + i)
-  //   3+2n..2+3n = content streams  (csId   = 3 + 2n + i)
+      const imgBytes = b64ToBytes(canvasToJpegB64(canvas, quality));
+      return {
+        bytes: imgBytes,
+        filter: "/DCTDecode",
+        width: canvas.width,
+        height: canvas.height,
+      };
+    })
+  );
+
 
   const pageId = (i: number) => 3 + i;
-  const imgId  = (i: number) => 3 + n + i;
-  const csId   = (i: number) => 3 + 2 * n + i;
+  const imgId = (i: number) => 3 + n + i;
+  const csId = (i: number) => 3 + 2 * n + i;
   const totalObjs = 3 * n + 2;
-
-  // obj 1 — catalog
   beginObj(1);
   pushStr(`<< /Type /Catalog /Pages 2 0 R >>\n`);
   endObj();
-
-  // obj 2 — page tree
   const kids = Array.from({ length: n }, (_, i) => `${pageId(i)} 0 R`).join(" ");
   beginObj(2);
   pushStr(`<< /Type /Pages /Kids [${kids}] /Count ${n} >>\n`);
@@ -76,8 +95,7 @@ export async function exportCanvasesToPDF(
 
   // per-page objects
   for (let i = 0; i < n; i++) {
-    const canvas = canvases[i];
-    const imgBytes = b64ToBytes(canvasToJpegB64(canvas, quality));
+    const imgInfo = pageImages[i];
 
     // page dict
     beginObj(pageId(i));
@@ -94,12 +112,12 @@ export async function exportCanvasesToPDF(
     beginObj(imgId(i));
     pushStr(
       `<< /Type /XObject /Subtype /Image\n` +
-      `   /Width ${canvas.width} /Height ${canvas.height}\n` +
+      `   /Width ${imgInfo.width} /Height ${imgInfo.height}\n` +
       `   /ColorSpace /DeviceRGB /BitsPerComponent 8\n` +
-      `   /Filter /DCTDecode /Length ${imgBytes.length} >>\n` +
+      `   /Filter ${imgInfo.filter} /Length ${imgInfo.bytes.length} >>\n` +
       `stream\n`
     );
-    push(imgBytes);
+    push(imgInfo.bytes);
     pushStr(`\nendstream\n`);
     endObj();
 

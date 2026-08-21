@@ -73,8 +73,24 @@ export const ExportQualityCard = ({ settings, pageCount, onUpdateSettings, onExp
 
   return (
     <div className="rounded-xl bg-zinc-50 border border-zinc-200 dark:bg-[#14141d] dark:border-[#232332] p-3 flex flex-col gap-3 transition-colors duration-200">
-      <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] uppercase tracking-wider">
-        📄 Export
+      <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-3.5 h-3.5"
+        >
+          <path d="M10 9H8" />
+          <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+          <path d="M16 13H8" />
+          <path d="M16 17H8" />
+          <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+        </svg>
+        Export
       </span>
 
       <div className="flex rounded-lg overflow-hidden border border-zinc-300 dark:border-[#272738] bg-white dark:bg-[#0b0b10]">
@@ -83,12 +99,22 @@ export const ExportQualityCard = ({ settings, pageCount, onUpdateSettings, onExp
             key={fmt}
             type="button"
             onClick={() => onUpdateSettings({ exportFormat: fmt })}
-            className={`flex-1 py-1.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${settings.exportFormat === fmt
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${settings.exportFormat === fmt
               ? "bg-primary text-white shadow-[inset_0_0_12px_rgba(255,85,51,0.25)]"
               : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
               }`}
           >
-            {fmt === "png" ? "🖼️ PNG" : "📑 PDF"}
+            {fmt === "png" ? (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
+                PNG
+              </>
+            ) : (
+              <>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /><line x1="16" x2="8" y1="13" y2="13" /><line x1="16" x2="8" y1="17" y2="17" /><line x1="10" x2="8" y1="9" y2="9" /></svg>
+                PDF
+              </>
+            )}
           </button>
         ))}
       </div>
@@ -150,8 +176,6 @@ export const ExportQualityCard = ({ settings, pageCount, onUpdateSettings, onExp
           </>
         )}
       </button>
-
-      <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-1" />
     </div>
   );
 };
