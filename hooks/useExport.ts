@@ -16,8 +16,9 @@ export function useExport(canvasRef: React.RefObject<HTMLCanvasElement | null>, 
     const canvas = canvasRef.current;
     if (!canvas) return;
     const blob = await canvasToPNGBlob(canvas, doc.globalSettings.highCompression);
-    downloadBlob(blob, "handwriting.png");
+    downloadBlob(blob, doc.globalSettings.highCompression ? "handwriting.webp" : "handwriting.png");
   };
+
 
   const handleExportPDF = async (): Promise<void> => {
     const activeFamily = fontFamily || (fontsMap[doc.globalSettings.font as FontKey] || caveat).style.fontFamily;

@@ -26,7 +26,7 @@ export function useEditorLogic() {
 
   const { uiState, setUiState, handleAddPage, activePage, activePageIndex, globalTextElement, globalTextContent } = useEditorUI(doc, dispatch, isLoaded);
   const { zoom, setZoom, handleZoomIn, handleZoomOut, handleResetZoom, handleFitWidth, handleTouchStart, handleTouchMove, handleTouchEnd } = useZoom(canvasRef);
-  const { handlePointerDown, handlePointerMove, handlePointerUp } = useCanvasInteraction(canvasRef, activePage, dispatch);
+  const { handlePointerDown, handlePointerMove, handlePointerUp, deleteSelectedImage } = useCanvasInteraction(canvasRef, activePage, dispatch);
 
   const [fontFamily, setFontFamily] = useState<string>(() => {
     const activeFont = fontsMap[doc.globalSettings.font as FontKey] || caveat;
@@ -90,9 +90,6 @@ export function useEditorLogic() {
 
       if (maxRequiredPages > doc.pages.length) {
         dispatch({ type: "ENSURE_PAGE_COUNT", count: maxRequiredPages });
-      }
-      if (targetPageIndex !== undefined && targetPageIndex !== activePageIndex) {
-        setUiState(s => ({ ...s, pendingActivePageIndex: targetPageIndex }));
       }
       if (uiState.lastEditIndex !== null) {
         setUiState(s => ({ ...s, lastEditIndex: null }));
@@ -158,6 +155,6 @@ export function useEditorLogic() {
     handleAddPage, handleZoomIn, handleZoomOut, handleResetZoom, handleFitWidth,
     handleTouchStart, handleTouchMove, handleTouchEnd, handlePointerDown,
     handlePointerMove, handlePointerUp, handleContentChange, handleAddImage,
-    handleExportPNG, handleExportPDF
+    handleExportPNG, handleExportPDF, deleteSelectedImage
   };
 }

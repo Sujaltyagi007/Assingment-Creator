@@ -165,6 +165,17 @@ export function documentReducer(doc: Document, action: DocumentAction): Document
       };
     }
     case "UPDATE_ELEMENT": {
+      if (action.updates.__delete) {
+        return {
+          ...doc,
+          pages: doc.pages.map((page) =>
+            page.id !== action.pageId ? page : {
+              ...page,
+              elements: page.elements.filter((el) => el.id !== action.elementId),
+            }
+          ),
+        };
+      }
       return {
         ...doc,
         pages: doc.pages.map((page) =>
@@ -205,10 +216,22 @@ export function documentReducer(doc: Document, action: DocumentAction): Document
     }
     case "DELETE_PAGE": {
       if (doc.pages.length <= 1) return doc;
-      return {
-        ...doc,
-        pages: doc.pages.filter((p) => p.id !== action.pageId),
-      };
+      
+      const isDeletingFirstPage = doc.pages[0].id === action.pageId;
+      let newPages = doc.pages.filter((p) => p.id !== action.pageId);
+      
+      if (isDeletingFirstPage && newPages.length > 0) {
+        // We must preserve the global text element from the deleted first page
+        const textElement = doc.pages[0].elements.find(el => el.type === "text");
+        if (textElement) {
+          newPages[0] = {
+            ...newPages[0],
+            elements: [textElement, ...newPages[0].elements]
+          };
+        }
+      }
+      
+      return { ...doc, pages: newPages };
     }
     case "ENSURE_PAGE_COUNT": {
       const targetCount = Math.min(action.count, 25);

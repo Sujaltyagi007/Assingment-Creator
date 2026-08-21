@@ -12,6 +12,8 @@ type Props = {
         strikethrough: boolean;
         highlight: boolean;
         center: boolean;
+        superscript?: boolean;
+        subscript?: boolean;
     };
 };
 
@@ -19,7 +21,7 @@ const nmOuter = "bg-zinc-100 dark:bg-[#16161e] shadow-[4px_4px_8px_#d4d4d8,-4px_
 const nmBtn = "bg-zinc-100 dark:bg-[#16161e] shadow-[2px_2px_4px_#d4d4d8,-2px_-2px_4px_#ffffff] dark:shadow-[2px_2px_4px_#0b0b0f,-2px_-2px_4px_#21212d] active:shadow-[inset_2px_2px_4px_#d4d4d8,inset_-2px_-2px_4px_#ffffff] dark:active:shadow-[inset_2px_2px_4px_#0b0b0f,inset_-2px_-2px_4px_#21212d] transition-shadow duration-200 border-none";
 const nmBtnActive = "bg-zinc-100 dark:bg-[#16161e] shadow-[inset_2px_2px_4px_#d4d4d8,inset_-2px_-2px_4px_#ffffff] dark:shadow-[inset_2px_2px_4px_#0b0b0f,inset_-2px_-2px_4px_#21212d] transition-shadow duration-200 border-none text-primary";
 
-export const WriteTab = React.memo(({ hasSelection, onFormatText, onAddImage, activeFormats = { bold: false, italic: false, underline: false, strikethrough: false, highlight: false, center: false } }: Props) => {
+export const WriteTab = React.memo(({ hasSelection, onFormatText, onAddImage, activeFormats = { bold: false, italic: false, underline: false, strikethrough: false, highlight: false, center: false, superscript: false, subscript: false } }: Props) => {
     return (
         <div className={`relative w-full rounded-full transition-all duration-300 p-[1.5px] ${nmOuter}`}>
             <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none drop-shadow-[0_0_8px_#ff5533]">
@@ -72,6 +74,12 @@ export const WriteTab = React.memo(({ hasSelection, onFormatText, onAddImage, ac
                     </button>
                     <button type="button" onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => onFormatText("s")} className={`w-7 h-7 flex items-center justify-center rounded-full line-through font-sans cursor-pointer text-xs ${activeFormats.strikethrough ? nmBtnActive : nmBtn}`} title="Strikethrough">
                         S
+                    </button>
+                    <button type="button" onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => onFormatText("sup")} className={`w-7 h-7 flex items-center justify-center rounded-full font-sans cursor-pointer text-xs ${activeFormats.superscript ? nmBtnActive : nmBtn}`} title="Superscript">
+                        x<sup>n</sup>
+                    </button>
+                    <button type="button" onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => onFormatText("sub")} className={`w-7 h-7 flex items-center justify-center rounded-full font-sans cursor-pointer text-xs ${activeFormats.subscript ? nmBtnActive : nmBtn}`} title="Subscript">
+                        x<sub>n</sub>
                     </button>
                 </div>
             </div>

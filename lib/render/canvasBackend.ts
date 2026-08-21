@@ -16,6 +16,31 @@ const MAX_TEXT_CACHE_ENTRIES = 30;
 // thumbnail) shares one computation per content/settings change.
 let layoutMemo: { key: string; lines: LayoutLine[] } | null = null;
 
+export function getPageTextRange(pageIndex: number): { start: number, end: number } | null {
+  if (!layoutMemo) return null;
+  const lines = layoutMemo.lines;
+  const pageLines = lines.filter(l => l.pageIndex === pageIndex);
+  if (pageLines.length === 0) return null;
+  
+  let start = 0;
+  if (pageIndex > 0) {
+    const prevPageLines = lines.filter(l => l.pageIndex === pageIndex - 1);
+    if (prevPageLines.length > 0 && prevPageLines[prevPageLines.length - 1].glyphs.length > 0) {
+       const lastGlyph = prevPageLines[prevPageLines.length - 1].glyphs.slice(-1)[0];
+       start = lastGlyph.srcIndex + 1;
+    } else {
+       start = pageLines[0].glyphs[0]?.srcIndex ?? 0;
+    }
+  }
+
+  let end = JSON.parse(layoutMemo.key)[0].length;
+  const nextPageLines = lines.filter(l => l.pageIndex === pageIndex + 1);
+  if (nextPageLines.length > 0 && nextPageLines[0].glyphs.length > 0) {
+    end = nextPageLines[0].glyphs[0].srcIndex;
+  }
+
+  return { start, end };
+}
 function drawRuledPaper(ctx: CanvasRenderingContext2D, settings: GlobalSettings) {
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, PAGE_WIDTH_PX, PAGE_HEIGHT_PX);
@@ -314,12 +339,18 @@ export function renderPageToCanvas(
         }
 
         octx.globalAlpha = tf.opacity;
-        const gSize = g.fontSize || settings.fontSize;
+        const baseSize = g.fontSize || settings.fontSize;
+        const gSize = (g.sup || g.sub) ? baseSize * 0.65 : baseSize;
         const tfnt = `${g.italic ? "italic " : ""}${g.bold ? "bold " : ""}${gSize}px ${fontFamily}`;
         if (tfnt !== lastFont) { octx.font = tfnt; lastFont = tfnt; }
         const tcol = g.color || lColor;
         if (tcol !== lastColor) { octx.fillStyle = octx.strokeStyle = tcol; lastColor = tcol; }
-        octx.translate(g.x + tf.dx, g.y + tf.dy);
+        
+        let yOffset = 0;
+        if (g.sup) yOffset = -baseSize * 0.4;
+        if (g.sub) yOffset = baseSize * 0.25;
+        
+        octx.translate(g.x + tf.dx, g.y + tf.dy + yOffset);
         if (tf.slant) octx.transform(1, 0, Math.tan(-tf.slant), 1, 0, 0);
         if (tf.rotation) octx.rotate(tf.rotation);
         octx.fillText(g.char, 0, 0);
@@ -434,14 +465,16 @@ export function renderPageToCanvas(
   let targetPageIndex = undefined;
   if (targetSrcIndex !== undefined && targetSrcIndex !== null) {
     for (const line of lines) {
-      if (line.glyphs.length > 0 && line.glyphs[0].srcIndex <= targetSrcIndex && line.glyphs[line.glyphs.length - 1].srcIndex >= targetSrcIndex) {
-        targetPageIndex = line.pageIndex;
-        break;
+      for (const g of line.glyphs) {
+        if (g.srcIndex >= targetSrcIndex) {
+          targetPageIndex = line.pageIndex;
+          break;
+        }
       }
+      if (targetPageIndex !== undefined) break;
     }
     if (targetPageIndex === undefined && lines.length > 0) {
-      const lastLine = lines[lines.length - 1];
-      if (targetSrcIndex >= (lastLine.glyphs.length > 0 ? lastLine.glyphs[lastLine.glyphs.length - 1].srcIndex : 0)) { targetPageIndex = lastLine.pageIndex; }
+      targetPageIndex = lines[lines.length - 1].pageIndex;
     }
   }
 

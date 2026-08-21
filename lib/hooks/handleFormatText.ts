@@ -7,6 +7,7 @@ export function useFormatText(baseFontSize: number = 28) {
     const [activeFormats, setActiveFormats] = useState({
         bold: false, italic: false, underline: false,
         strikethrough: false, highlight: false, center: false,
+        superscript: false, subscript: false,
     });
 
     const checkFormat = (checkNode: (el: HTMLElement) => boolean): boolean => {
@@ -45,6 +46,8 @@ export function useFormatText(baseFontSize: number = 28) {
             strikethrough: document.queryCommandState("strikeThrough"),
             highlight: isSelectionHighlighted(),
             center: isSelectionCentered(),
+            superscript: document.queryCommandState("superscript"),
+            subscript: document.queryCommandState("subscript"),
         });
     };
 
@@ -76,6 +79,8 @@ export function useFormatText(baseFontSize: number = 28) {
             case "i": exec("italic"); break;
             case "u": exec("underline"); break;
             case "s": exec("strikeThrough"); break;
+            case "sup": exec("superscript"); break;
+            case "sub": exec("subscript"); break;
             case "center": exec(isSelectionCentered() ? "justifyLeft" : "justifyCenter"); break;
             case "h": const color = isSelectionHighlighted() ? "transparent" : "#fef08a";
                 try { exec("hiliteColor", color); } catch { exec("backColor", color); }

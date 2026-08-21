@@ -1,18 +1,12 @@
 "use client";
 import Sidebar from "@/components/Sidebar";
 import { useEditorLogic } from "@/hooks/useEditorLogic";
-import { FontKey, fontsMap, caveat } from "@/lib/fonts";
 import { motion, AnimatePresence } from "motion/react";
-import { exportCanvasesToPDF } from "@/lib/export/exportPDF";
-import { useEffect, useReducer, useRef, useState } from "react";
-import { canvasToPNGBlob, downloadBlob } from "@/lib/export/exportPNG";
-import { createDefaultDocument, documentReducer, syncIdCounter } from "@/lib/state/documentReducer";
-import { renderPageToCanvas, PAGE_WIDTH_PX, PAGE_HEIGHT_PX } from "@/lib/render/canvasBackend";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { getPageTextRange } from "@/lib/render/canvasBackend";
+import { useEffect, useReducer, useRef, useCallback } from "react";
+import { renderPageToCanvas, PAGE_WIDTH_PX, PAGE_HEIGHT_PX } from "@/lib/render/canvasBackend";
 
-// Thumbnails are ~64px wide, so render them at a fraction of page resolution,
-// and on a trailing throttle so continuous typing repaints them at most once
-// per interval instead of on every keystroke.
 const THUMBNAIL_SCALE = 0.25;
 const THUMBNAIL_THROTTLE_MS = 300;
 
@@ -52,18 +46,53 @@ function PageThumbnail({ page, pageIndex, settings, fontFamily, globalTextConten
 export default function Editor() {
   const {
     doc, dispatch, canvasRef, scrollContainerRef, previewWrapperRef,
-    activePage, activePageIndex, globalTextContent, fontFamily,
+    activePage, globalTextContent, fontFamily,
     activePageId, setActivePageId, pageToDelete, setPageToDelete,
     isHoveringCanvas, setIsHoveringCanvas, toastMessage, mobileView, setMobileView,
-    zoomMode, zoomLevel,
+    zoomMode, zoomLevel, deleteSelectedImage, selectedImageId,
     handleAddPage, handleZoomIn, handleZoomOut, handleResetZoom, handleFitWidth,
     handleTouchStart, handleTouchMove, handleTouchEnd, handlePointerDown,
     handlePointerMove, handlePointerUp, handleContentChange, handleAddImage,
     handleExportPNG, handleExportPDF
   } = useEditorLogic();
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if ((e.key === "Delete" || e.key === "Backspace") && isHoveringCanvas) {
+      e.preventDefault(); deleteSelectedImage();
+    }
+  }, [isHoveringCanvas, deleteSelectedImage]);
+
+  const handleSaveDocument = useCallback(() => {
+    const json = JSON.stringify(doc);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "handwriting-project.wbh";
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [doc]);
+
+  const handleLoadDocument = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = e.target?.result as string;
+        const loadedDoc = JSON.parse(json);
+        if (loadedDoc && loadedDoc.pages && loadedDoc.globalSettings) {
+          dispatch({ type: "LOAD_DOCUMENT", document: loadedDoc });
+        } else {
+          alert("Invalid project file.");
+        }
+      } catch (err) {
+        alert("Failed to load project file.");
+      }
+    };
+    reader.readAsText(file);
+  }, [dispatch]);
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden flex-col lg:flex-row bg-zinc-100 dark:bg-[#08080a] text-zinc-900 dark:text-zinc-100 transition-colors duration-200">
+    <div className="flex h-screen w-screen overflow-hidden flex-col lg:flex-row bg-zinc-100 dark:bg-[#08080a] text-zinc-900 dark:text-zinc-100 transition-colors duration-200" onKeyDown={handleKeyDown} tabIndex={-1}>
       <div className={`w-full lg:w-[25vw] lg:min-w-75 lg:max-w-105 h-full shrink-0 ${mobileView === "edit" ? "block" : "hidden lg:block"}`}>
         <Sidebar content={globalTextContent}
           onContentChange={handleContentChange}
@@ -71,16 +100,14 @@ export default function Editor() {
           settings={{ ...doc.globalSettings, ...(activePage.settingsOverride || {}) }}
           onUpdateSettings={(settings) => {
             const { paperStyle, ...globalUpdates } = settings;
-            if (paperStyle !== undefined) {
-              dispatch({ type: "UPDATE_PAGE_SETTINGS", pageId: activePage.id, settings: { paperStyle } });
-            }
-            if (Object.keys(globalUpdates).length > 0) {
-              dispatch({ type: "UPDATE_GLOBAL_SETTINGS", settings: globalUpdates });
-            }
+            if (paperStyle !== undefined) { dispatch({ type: "UPDATE_PAGE_SETTINGS", pageId: activePage.id, settings: { paperStyle } }); }
+            if (Object.keys(globalUpdates).length > 0) { dispatch({ type: "UPDATE_GLOBAL_SETTINGS", settings: globalUpdates }); }
           }}
           onUpdateRealism={(realism) => dispatch({ type: "UPDATE_REALISM", realism })}
           onExportPNG={handleExportPNG}
           onExportPDF={handleExportPDF}
+          onSaveDocument={handleSaveDocument}
+          onLoadDocument={handleLoadDocument}
           pageCount={doc.pages.length}
         />
       </div>
@@ -90,25 +117,13 @@ export default function Editor() {
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[#FF5533]/4 rounded-full blur-[140px] pointer-events-none" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/4 rounded-full blur-[140px] pointer-events-none" />
 
-        <div ref={previewWrapperRef}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          className="w-full h-full overflow-auto flex p-6 touch-pan-x touch-pan-y [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-400 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full"
-        >
+        <div ref={previewWrapperRef} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
+          className="w-full h-full overflow-auto flex p-6 touch-pan-x touch-pan-y [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-zinc-400 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-700 [&::-webkit-scrollbar-thumb]:rounded-full"        >
           <div className="relative shadow-2xl rounded-sm overflow-hidden flex items-center justify-center m-auto transition-all">
-            <canvas
-              ref={canvasRef}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              className={zoomMode === "fit-height" ? "max-h-[88vh] w-auto max-w-full object-contain rounded-sm shadow-2xl border border-zinc-300 dark:border-zinc-800/60" : zoomMode === "fit-width" ? "w-full h-auto max-w-none max-h-none object-contain rounded-sm shadow-2xl border border-zinc-300 dark:border-zinc-800/60" : "w-auto h-auto max-w-none max-h-none object-contain rounded-sm shadow-2xl border border-zinc-300 dark:border-zinc-800/60 origin-top"}
-              style={zoomMode === "custom" ? { width: PAGE_WIDTH_PX * zoomLevel, height: PAGE_HEIGHT_PX * zoomLevel } : undefined}
-            />
+            <canvas ref={canvasRef} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} className={zoomMode === "fit-height" ? "max-h-[88vh] w-auto max-w-full object-contain rounded-sm shadow-2xl border border-zinc-300 dark:border-zinc-800/60" : zoomMode === "fit-width" ? "w-full h-auto max-w-none max-h-none object-contain rounded-sm shadow-2xl border border-zinc-300 dark:border-zinc-800/60" : "w-auto h-auto max-w-none max-h-none object-contain rounded-sm shadow-2xl border border-zinc-300 dark:border-zinc-800/60 origin-top"} style={zoomMode === "custom" ? { width: PAGE_WIDTH_PX * zoomLevel, height: PAGE_HEIGHT_PX * zoomLevel } : undefined} />
           </div>
         </div>
 
-        {/* Floating UI */}
         <div className={`absolute top-6 left-6 z-20 flex items-center gap-2.5 transition-opacity duration-300 ${isHoveringCanvas ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
           <button onClick={handleFitWidth} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-zinc-200 text-zinc-700 hover:text-zinc-950 hover:bg-zinc-100 dark:bg-[#16161e] dark:border-zinc-700/50 rounded-full shadow-lg dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800 transition-colors text-xs font-semibold cursor-pointer">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
@@ -116,6 +131,19 @@ export default function Editor() {
           </button>
           <ThemeToggle variant="pill" />
         </div>
+
+        <AnimatePresence>
+          {selectedImageId && (
+            <motion.div initial={{ opacity: 0, y: -10, scale: 0.95, x: "-50%" }} animate={{ opacity: 1, y: 0, scale: 1, x: "-50%" }} exit={{ opacity: 0, y: -10, scale: 0.95, x: "-50%" }} transition={{ type: "spring", stiffness: 400, damping: 25 }} className="absolute top-20 left-1/2 z-30 flex items-center gap-2 px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl rounded-xl pointer-events-auto">
+              <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 px-2">Image Selected</span>
+              <div className="w-px h-4 bg-zinc-300 dark:bg-zinc-700 mx-1" />
+              <button onClick={() => deleteSelectedImage()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 transition-colors text-xs font-semibold cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                Delete
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className={`absolute lg:bottom-6 bottom-24 right-6 z-10 hidden sm:flex flex-col items-center bg-white border border-zinc-200 text-zinc-600 dark:bg-[#16161e] dark:border-zinc-700/50 dark:text-zinc-400 rounded-xl overflow-hidden shadow-xl transition-opacity duration-300 ${isHoveringCanvas ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
           <button onClick={handleZoomIn} className="p-2.5 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:text-white dark:hover:bg-zinc-800 transition-colors cursor-pointer" title="Zoom In">
@@ -184,7 +212,19 @@ export default function Editor() {
                 <button onClick={() => setPageToDelete(null)}
                   className="px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer">Cancel</button>
                 <button onClick={() => {
-                  if (activePageId === pageToDelete) { setActivePageId(doc.pages[0].id); }
+                  const pageIndex = doc.pages.findIndex(p => p.id === pageToDelete);
+
+                  const range = getPageTextRange(pageIndex);
+                  if (range) {
+                    const newContent = globalTextContent.substring(0, range.start) + globalTextContent.substring(range.end);
+                    handleContentChange(newContent);
+                  }
+
+                  const nextPageId = pageIndex > 0 ? doc.pages[pageIndex - 1].id : (doc.pages[pageIndex + 1]?.id || doc.pages[0]?.id);
+
+                  if (activePageId === pageToDelete && nextPageId) {
+                    setActivePageId(nextPageId);
+                  }
                   dispatch({ type: "DELETE_PAGE", pageId: pageToDelete });
                   setPageToDelete(null);
                 }}

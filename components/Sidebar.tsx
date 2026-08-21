@@ -17,12 +17,14 @@ interface SidebarProps {
     onUpdateRealism: (realism: Partial<RealismSettings>) => void;
     onExportPNG: () => Promise<void>;
     onExportPDF: () => Promise<void>;
+    onSaveDocument?: () => void;
+    onLoadDocument?: (file: File) => void;
     pageCount: number;
 }
 
 type Tabs = "write" | "style" | "settings";
 
-export default function Sidebar({ content, onContentChange, onAddImage, settings, onUpdateSettings, onUpdateRealism, onExportPNG, onExportPDF, pageCount }: SidebarProps) {
+export default function Sidebar({ content, onContentChange, onAddImage, settings, onUpdateSettings, onUpdateRealism, onExportPNG, onExportPDF, onSaveDocument, onLoadDocument, pageCount }: SidebarProps) {
     const [activeTab, setActiveTab] = useState<Tabs>("write");
     const { hasSelection, activeFormats, handleSelectionChange, handleFormatText } = useFormatText(settings.fontSize);
     const randomizeSeed = () => { onUpdateRealism({ seed: Math.floor(Math.random() * 100) + 1 }); };
@@ -56,7 +58,7 @@ export default function Sidebar({ content, onContentChange, onAddImage, settings
         {
             id: "settings",
             label: "SETTINGS",
-            content: <Options settings={settings} pageCount={pageCount} onUpdateSettings={onUpdateSettings} onExportPNG={onExportPNG} onExportPDF={onExportPDF} />,
+            content: <Options settings={settings} pageCount={pageCount} onUpdateSettings={onUpdateSettings} onExportPNG={onExportPNG} onExportPDF={onExportPDF} onSaveDocument={onSaveDocument} onLoadDocument={onLoadDocument} />,
         },
     ];
 
@@ -91,7 +93,7 @@ export default function Sidebar({ content, onContentChange, onAddImage, settings
                 )}
 
                 {activeTab === "settings" && (
-                    <Options settings={settings} pageCount={pageCount} onUpdateSettings={onUpdateSettings} onExportPNG={onExportPNG} onExportPDF={onExportPDF} />
+                    <Options settings={settings} pageCount={pageCount} onUpdateSettings={onUpdateSettings} onExportPNG={onExportPNG} onExportPDF={onExportPDF} onSaveDocument={onSaveDocument} onLoadDocument={onLoadDocument} />
                 )}
             </div>
         </aside>

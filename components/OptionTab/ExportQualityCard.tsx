@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { GlobalSettings } from '@/lib/types';
 import { AnimatedCheckbox } from '@/components/ui/AnimatedCheckbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useDocument } from '@/lib/state/DocumentContext';
+import { useRef } from 'react';
 
 type Props = {
   settings: GlobalSettings;
@@ -13,6 +15,8 @@ type Props = {
 };
 
 export const ExportQualityCard = ({ settings, pageCount, onUpdateSettings, onExportPNG, onExportPDF }: Props) => {
+  const { doc, dispatch } = useDocument();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const isPDF = settings.exportFormat === "pdf";
 
@@ -38,6 +42,33 @@ export const ExportQualityCard = ({ settings, pageCount, onUpdateSettings, onExp
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handleSaveWorkFile = () => {
+    const jsonStr = JSON.stringify(doc);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `assignment_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleLoadWorkFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        dispatch({ type: "LOAD_DOCUMENT", document: parsed });
+      } catch (err) {
+        console.error("Failed to load work file", err);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // Reset input
   };
 
   return (
@@ -119,6 +150,29 @@ export const ExportQualityCard = ({ settings, pageCount, onUpdateSettings, onExp
           </>
         )}
       </button>
+
+      <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-1" />
+
+      {/* Save / Load Work File */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={handleSaveWorkFile}
+          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 border border-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 py-2 text-zinc-700 dark:text-zinc-300 font-semibold text-[11px] hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          Save Project
+        </button>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 border border-zinc-300 dark:bg-zinc-800 dark:border-zinc-700 py-2 text-zinc-700 dark:text-zinc-300 font-semibold text-[11px] hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          Load Project
+        </button>
+        <input type="file" ref={fileInputRef} onChange={handleLoadWorkFile} accept=".json" className="hidden" />
+      </div>
     </div>
   );
 };

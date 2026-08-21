@@ -28,7 +28,9 @@ export async function exportCanvasesToPDF(
   canvases: HTMLCanvasElement[],
   highCompression: boolean,
 ): Promise<Blob> {
-  const quality = highCompression ? 0.7 : 0.95;
+  // 0.82 is a sweet spot for JPEG where it achieves excellent compression 
+  // without introducing the heavy, unacceptable artifacts seen at 0.70.
+  const quality = highCompression ? 0.82 : 0.98;
 
   const chunks: Uint8Array[] = [];
   let bytePos = 0;
