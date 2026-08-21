@@ -26,7 +26,7 @@ export interface LayoutGlyph {
   highlight?: boolean;
   strikethrough?: boolean;
   color?: string;
-  align?: "left" | "center";
+  align?: "left" | "center" | "right";
   fontSize?: number;
   sup?: boolean;
   sub?: boolean;
@@ -57,7 +57,7 @@ interface StyledChar {
   highlight: boolean;
   strikethrough: boolean;
   color: string;
-  align: "left" | "center";
+  align: "left" | "center" | "right";
   fontSize?: number;
   sup: boolean;
   sub: boolean;
@@ -65,7 +65,7 @@ interface StyledChar {
 
 function parseStyledText(content: string): StyledChar[] {
   const chars: StyledChar[] = [];
-  let b = false, i = false, u = false, h = false, s = false, align: "left" | "center" = "left", sup = false, sub = false;
+  let b = false, i = false, u = false, h = false, s = false, align: "left" | "center" | "right" = "left", sup = false, sub = false;
   const cStack: string[] = [];
   const sStack: number[] = [];
   for (let idx = 0; idx < content.length; ) {
@@ -86,6 +86,10 @@ function parseStyledText(content: string): StyledChar[] {
         if (t === "/s") { s = false; idx = n; continue; }
         if (t === "center") { align = "center"; idx = n; continue; }
         if (t === "/center") { align = "left"; idx = n; continue; }
+        if (t === "right") { align = "right"; idx = n; continue; }
+        if (t === "/right") { align = "left"; idx = n; continue; }
+        if (t === "left") { align = "left"; idx = n; continue; }
+        if (t === "/left") { align = "left"; idx = n; continue; }
         if (t === "sup") { sup = true; idx = n; continue; }
         if (t === "/sup") { sup = false; idx = n; continue; }
         if (t === "sub") { sub = true; idx = n; continue; }
@@ -135,10 +139,13 @@ export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
     return cache.get(k)!;
   };
 
-  const pushLine = (line: LayoutGlyph[], isCenter: boolean) => {
-    if (isCenter && line.length) {
+  const pushLine = (line: LayoutGlyph[], isCenter: boolean, isRight: boolean) => {
+    if ((isCenter || isRight) && line.length) {
       const lineWidth = line[line.length - 1].x + getW(line[line.length - 1]) - line[0].x;
-      const targetStartX = (pageWidth - lineWidth) / 2;
+      let targetStartX = 0;
+      if (isCenter) targetStartX = (pageWidth - lineWidth) / 2;
+      else if (isRight) targetStartX = pageWidth - margins.right - lineWidth;
+      
       const shiftX = targetStartX - line[0].x;
       line.forEach(g => g.x += shiftX);
     }
@@ -150,8 +157,9 @@ export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
   parseStyledText(content).forEach(c => c.char === "\n" ? paras.push([]) : paras[paras.length - 1].push(c));
 
   paras.forEach(para => {
-    if (!para.length) return pushLine([], false);
+    if (!para.length) return pushLine([], false, false);
     const isCenter = para.some(c => c.align === "center");
+    const isRight = para.some(c => c.align === "right");
     let pref: StyledChar[] = [], body = para, line: LayoutGlyph[] = [], curX = margins.left, pGlyphs: LayoutGlyph[] = [];
 
     if (!isCenter) {
@@ -169,19 +177,19 @@ export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
       pGlyphs = pref.map(c => ({ ...c, x: pX, y: curY, pX: pX += getW(c) })).map(({ pX, ...g }) => g);
     }
 
-    if (!body.length && pGlyphs.length) return pushLine(pGlyphs, false);
+    if (!body.length && pGlyphs.length) return pushLine(pGlyphs, false, false);
 
     body.reduce((acc, c) => (c.char === " " ? acc.push([c]) : acc[acc.length - 1].push(c), acc), [[]] as StyledChar[][]).forEach((w, i) => {
-      if (curX + w.reduce((s, c) => s + getW(c), 0) > margins.left + maxW && line.length) { pushLine(line, isCenter); line = []; curX = margins.left; }
+      if (curX + w.reduce((s, c) => s + getW(c), 0) > margins.left + maxW && line.length) { pushLine(line, isCenter, isRight); line = []; curX = margins.left; }
       if (i === 0 && pGlyphs.length && !line.length) line.push(...pGlyphs);
       w.forEach(c => {
         const cW = getW(c);
-        if (curX + cW > margins.left + maxW && line.length) { pushLine(line, isCenter); line = []; curX = margins.left; }
+        if (curX + cW > margins.left + maxW && line.length) { pushLine(line, isCenter, isRight); line = []; curX = margins.left; }
         line.push({ ...c, x: curX, y: curY });
         curX += cW;
       });
     });
-    if (line.length || pGlyphs.length) pushLine(line.length ? line : pGlyphs, isCenter);
+    if (line.length || pGlyphs.length) pushLine(line.length ? line : pGlyphs, isCenter, isRight);
   });
 
   if (lines.length > 1 && !lines[lines.length - 1].glyphs.length) lines.pop();

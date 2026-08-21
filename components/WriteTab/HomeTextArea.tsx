@@ -28,6 +28,8 @@ export interface HomeTextAreaProps {
 function bbcodeToHtml(text: string, baseFontSize: number = 28): string {
     let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
         .replace(/\[center\]([\s\S]*?)\[\/center\]/g, '<div style="text-align: center;">$1</div>')
+        .replace(/\[right\]([\s\S]*?)\[\/right\]/g, '<div style="text-align: right;">$1</div>')
+        .replace(/\[left\]([\s\S]*?)\[\/left\]/g, '<div style="text-align: left;">$1</div>')
         .replace(/\[b\]/g, "<strong>").replace(/\[\/b\]/g, "</strong>")
         .replace(/\[i\]/g, "<em>").replace(/\[\/i\]/g, "</em>")
         .replace(/\[u\]/g, "<u>").replace(/\[\/u\]/g, "</u>")
@@ -105,6 +107,8 @@ function htmlToBbcode(html: string, baseFontSize: number = 28): string {
             }
 
             const isCenter = tag === "center" || el.style.textAlign === "center" || el.getAttribute("align") === "center";
+            const isRight = el.style.textAlign === "right" || el.getAttribute("align") === "right";
+            const isLeft = el.style.textAlign === "left" || el.getAttribute("align") === "left";
 
             let fText = text;
             if (tag === "strong" || tag === "b" || el.style.fontWeight === "bold" || parseInt(el.style.fontWeight, 10) >= 700) fText = `[b]${fText}[/b]`;
@@ -116,7 +120,10 @@ function htmlToBbcode(html: string, baseFontSize: number = 28): string {
             if (tag === "mark" || hasBg) fText = `[h]${fText}[/h]`;
             if (textColor && !hasBg) fText = `[color=${textColor}]${fText}[/color]`;
             if (sizeVal) fText = `[size=${sizeVal}]${fText}[/size]`;
+            
             if (isCenter && fText.trim()) fText = `[center]${fText}[/center]`;
+            else if (isRight && fText.trim()) fText = `[right]${fText}[/right]`;
+            else if (isLeft && fText.trim()) fText = `[left]${fText}[/left]`;
             if (tag === "br") return "\n";
 
             const isBlock = BLOCK_TAGS.includes(tag);
@@ -167,11 +174,10 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                     const reader = new FileReader();
                     reader.onload = (event) => {
                         const result = event.target?.result as string;
-                        // Add image to canvas (default size 200x200, user can resize)
                         onAddImage(result, 200, 200);
                     };
                     reader.readAsDataURL(file);
-                    return; // Stop processing since we handled an image
+                    return;
                 }
             }
         }
@@ -179,7 +185,6 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
         const html = e.clipboardData.getData("text/html");
         const plainText = e.clipboardData.getData("text/plain");
 
-        // Helper to convert LaTeX-like math symbols to Unicode
         const convertMathSymbols = (text: string) => {
             const symbols: Record<string, string> = {
                 '\\theta': 'θ', '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ', '\\pi': 'π',
@@ -189,7 +194,6 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
             };
             let result = text;
             for (const [latex, unicode] of Object.entries(symbols)) {
-                // Replace all occurrences of the latex command
                 result = result.split(latex).join(unicode);
             }
             return result;
@@ -198,88 +202,109 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
         if (html) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, "text/html");
-            const unwantedTags = ['script', 'style', 'meta', 'svg', 'iframe', 'form', 'img', 'noscript', 'link', 'object', 'applet', 'nav', 'footer', 'header', 'aside'];
-            unwantedTags.forEach(tag => { doc.querySelectorAll(tag).forEach(el => el.remove()); });
-
-            const cleanNode = (node: Node) => {
-                if (node.nodeType === Node.ELEMENT_NODE) {
-                    const el = node as HTMLElement;
-                    const tag = el.tagName.toLowerCase();
-                    const fw = el.style.fontWeight;
-                    const fs = el.style.fontStyle;
-                    const td = el.style.textDecoration;
-                    const ds = el.getAttribute("data-size");
-                    let replacement: HTMLElement | null = null;
-                    if (tag.match(/^h[1-6]$/)) {
-                        const level = parseInt(tag[1]);
-                        const size = Math.max(16, Math.round(48 - ((level - 1) * 5)));
-                        replacement = document.createElement('div');
-                        replacement.setAttribute("data-size", size.toString());
-                        replacement.innerHTML = el.innerHTML;
-                    }
-                    // Map lists to text bullets — use <span> (inline) so prefix + content
-                    // stays on one line; the outer <ul>/<ol>→<div> provides the block break.
-                    else if (tag === 'li') {
-                        const isOrdered = el.closest('ol') !== null;
-                        const index = isOrdered ? Array.from(el.parentNode?.children || []).indexOf(el) + 1 : null;
-                        replacement = document.createElement('span');
-                        const prefix = isOrdered ? `${index}. ` : `• `;
-                        replacement.innerHTML = prefix + el.innerHTML.trim();
-                    }
-                    // Flatten tables
-                    else if (tag === 'table') {
-                        replacement = document.createElement('div');
-                        const tableText = Array.from(el.querySelectorAll('tr')).map(tr => {
-                            return Array.from(tr.querySelectorAll('td, th')).map(td => td.textContent?.trim() || "").join(" | ");
-                        }).join("<br/>");
-                        replacement.innerHTML = tableText;
-                    }
-                    else if (tag === 'a' || tag === 'b' || tag === 'strong') {
-                        replacement = document.createElement('span');
-                        replacement.innerHTML = el.innerHTML;
-                    }
-
-                    const target = replacement || el;
-                    if (replacement) { el.replaceWith(replacement); }
-                    Array.from(target.attributes).forEach(attr => { target.removeAttribute(attr.name); });
-                    if (ds || replacement?.getAttribute("data-size")) { target.setAttribute("data-size", ds || replacement!.getAttribute("data-size")!); }
-                    if (fs === 'italic' || tag === 'i' || tag === 'em') { target.style.fontStyle = 'italic'; }
-                    if (td.includes('line-through') || tag === 's' || tag === 'strike' || tag === 'del') { target.style.textDecoration = 'line-through'; }
-                    if (td.includes('underline') || tag === 'u') { target.style.textDecoration = 'underline'; }
-
-                    Array.from(target.childNodes).forEach(cleanNode);
-                }
-            };
-
-            Array.from(doc.body.childNodes).forEach(cleanNode);
-
-            doc.querySelectorAll('ul, ol').forEach(el => {
-                const newEl = document.createElement('div');
-                // Each <li> was replaced with a <span>; join them with <br> so each
-                // list item lands on its own line in the output.
-                const items = Array.from(el.querySelectorAll('span'));
-                if (items.length > 0) {
-                    newEl.innerHTML = items.map(s => s.outerHTML).join('<br>');
-                } else {
-                    newEl.innerHTML = el.innerHTML;
-                }
-                el.replaceWith(newEl);
+            ['script', 'style', 'meta', 'svg', 'iframe', 'form', 'img', 'noscript',
+             'link', 'object', 'applet', 'nav', 'footer', 'header', 'aside'].forEach(t => {
+                doc.querySelectorAll(t).forEach(el => el.remove());
             });
 
-            // Convert LaTeX/math expressions into Unicode text
-            const finalHtml = convertMathSymbols(doc.body.innerHTML);
-            document.execCommand("insertHTML", false, finalHtml);
+            const INLINE_TAGS = new Set(['span', 'a', 'b', 'strong', 'i', 'em', 'u', 's',
+                'strike', 'del', 'sup', 'sub', 'mark', 'code', 'small', 'abbr', 'cite', 'q']);
+
+            const nodeToText = (node: Node): string => {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    return convertMathSymbols(node.nodeValue || '');
+                }
+                if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+                const el = node as HTMLElement;
+                const tag = el.tagName.toLowerCase();
+                if (['script', 'style', 'meta'].includes(tag)) return '';
+
+                const innerText = () => Array.from(el.childNodes).map(c => nodeToText(c)).join('');
+
+                if (tag === 'br') return '\n';
+
+                // Headings → sized + bold on their own line
+                if (tag.match(/^h[1-6]$/)) {
+                    const level = parseInt(tag[1]);
+                    const size = Math.max(16, Math.round(48 - ((level - 1) * 5)));
+                    const text = innerText().trim();
+                    return text ? `\n[size=${size}][b]${text}[/b][/size]\n` : '\n';
+                }
+
+                // List items → "• text" or "1. text" — no extra blank lines
+                if (tag === 'li') {
+                    const isOrdered = el.closest('ol') !== null;
+                    const idx = Array.from(el.parentNode?.children || []).indexOf(el) + 1;
+                    const prefix = isOrdered ? `${idx}. ` : '• ';
+                    const text = innerText().trim();
+                    return text ? `\n${prefix}${text}` : '';
+                }
+
+                // ul/ol → items + one trailing newline
+                if (tag === 'ul' || tag === 'ol') {
+                    const items = Array.from(el.childNodes).map(c => nodeToText(c)).join('');
+                    return items + '\n';
+                }
+
+                // Table → flatten to rows
+                if (tag === 'table') {
+                    const rows = Array.from(el.querySelectorAll('tr')).map(tr =>
+                        Array.from(tr.querySelectorAll('td, th')).map(td => td.textContent?.trim() || '').join(' | ')
+                    );
+                    return '\n' + rows.join('\n') + '\n';
+                }
+
+                // Build inline formatting for this element
+                let text = innerText();
+                const fw = el.style.fontWeight;
+                const tdStyle = el.style.textDecoration || '';
+                const bg = el.style.backgroundColor || el.style.background || el.getAttribute('bgcolor') || '';
+                const hasBg = bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'none';
+                const color = el.style.color || el.getAttribute('color') || '';
+                const fStyle = el.style.fontStyle;
+
+                if (tag === 'sup') text = `[sup]${text}[/sup]`;
+                else if (tag === 'sub') text = `[sub]${text}[/sub]`;
+                if (tag === 'mark' || hasBg) text = `[h]${text}[/h]`;
+                if (tag === 's' || tag === 'strike' || tag === 'del' || tdStyle.includes('line-through')) text = `[s]${text}[/s]`;
+                if (tag === 'u' || tdStyle.includes('underline')) text = `[u]${text}[/u]`;
+                if (tag === 'em' || tag === 'i' || fStyle === 'italic') text = `[i]${text}[/i]`;
+                if (tag === 'strong' || tag === 'b' || fw === 'bold' || parseInt(fw) >= 700) text = `[b]${text}[/b]`;
+                if (color && !hasBg) text = `[color=${color}]${text}[/color]`;
+
+                // Block-level: one \n before + after, detect alignment
+                if (!INLINE_TAGS.has(tag)) {
+                    const ta = el.style.textAlign || el.getAttribute('align') || '';
+                    const trimmed = text.trim();
+                    if (!trimmed) return '\n';
+                    let wrapped = trimmed;
+                    if (ta === 'center') wrapped = `[center]${wrapped}[/center]`;
+                    else if (ta === 'right') wrapped = `[right]${wrapped}[/right]`;
+                    return `\n${wrapped}\n`;
+                }
+
+                return text;
+            };
+
+            let bbcode = Array.from(doc.body.childNodes).map(n => nodeToText(n)).join('');
+
+            // Collapse 3+ newlines → max 2, strip leading/trailing
+            bbcode = bbcode
+                .replace(/\n{3,}/g, '\n\n')
+                .replace(/\n\n/g, '\n')
+                .replace(/^\n+/, '')
+                .replace(/\n+$/, '');
+
+            const insertHtml = bbcodeToHtml(bbcode, baseFontSize);
+            document.execCommand("insertHTML", false, insertHtml);
         } else if (plainText) {
-            // Normalize plain text: limit sequential newlines, remove invisible chars
             let normalizedText = plainText
                 .replace(/\r\n/g, '\n')
                 .replace(/\n{3,}/g, '\n\n')
                 .replace(/[\t ]+$/gm, '')
                 .replace(/[\u200B-\u200D\uFEFF]/g, '');
-
-            // Convert LaTeX/math expressions into Unicode text
             normalizedText = convertMathSymbols(normalizedText);
-
             document.execCommand("insertText", false, normalizedText);
         }
     }, []);
@@ -422,7 +447,7 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
 
     const handleSelect = useCallback(() => {
         const selection = window.getSelection();
-        const hasSel = !!selection && selection.toString().length > 0;
+        const hasSel = !!selection && !!editableRef.current && editableRef.current.contains(selection.anchorNode);
         if (onSelectionChange && editableRef.current) {
             onSelectionChange(hasSel, 0, 0, editableRef.current);
         }
@@ -459,7 +484,7 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
             </div>
 
             {showFindReplace && (
-                <div className="absolute top-4 right-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl rounded-lg p-3 z-10 flex flex-col gap-2 w-72 animate-in fade-in slide-in-from-top-2">
+                <div className="absolute bottom-14 left-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl rounded-lg p-3 z-10 flex flex-col gap-2 w-72 max-w-[calc(100%-2rem)] animate-in fade-in slide-in-from-bottom-2">
                     <div className="flex justify-between items-center mb-1">
                         <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Find & Replace</span>
                         <button onClick={() => setShowFindReplace(false)} className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 cursor-pointer">
