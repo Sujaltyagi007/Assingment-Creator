@@ -5,7 +5,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { DocumentProvider } from "@/lib/state/DocumentContext";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
 
 const varela = Signika({
   subsets: ["latin"],
@@ -32,13 +32,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              try {
-                const storedTheme = localStorage.getItem('theme');
-                if (storedTheme === 'light') {
-                  document.documentElement.classList.remove('dark');
-                } else {
-                  document.documentElement.classList.add('dark');
-                }
+              try { const storedTheme = localStorage.getItem('theme');
+                if (storedTheme === 'light') { document.documentElement.classList.remove('dark') } else { document.documentElement.classList.add('dark'); }
               } catch (e) {}
             `,
           }}

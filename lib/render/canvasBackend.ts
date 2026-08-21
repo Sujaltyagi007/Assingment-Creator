@@ -7,10 +7,11 @@ export const PAGE_HEIGHT_PX = 1123;
 
 const imageCache = new Map<string, HTMLImageElement>();
 
-// Full-page offscreen canvases are ~3.5MB each; cap the cache so typing
-// (which mints new keys every keystroke) cannot grow memory unboundedly.
-const textCache = new Map<string, HTMLCanvasElement>();
-const MAX_TEXT_CACHE_ENTRIES = 30;
+interface CacheEntry {
+  key: string;
+  canvas: HTMLCanvasElement;
+}
+const textCache = new Map<number, CacheEntry>();
 
 // Layout covers the whole document, so every page (main canvas + each
 // thumbnail) shares one computation per content/settings change.
@@ -443,16 +444,18 @@ export function renderPageToCanvas(
     return offscreen;
   };
 
-  const cacheKey = `${globalTextContent}_${pageIndex}_${fontFamily}_${settings.fontSize}_${settings.lineSpacing}_${settings.wordSpacing}_${settings.inkColor}_${settings.marginPreset}_${settings.leftMargin ?? 105}_${settings.topMargin ?? 105}_${settings.smartQA}_${settings.autoHeadings}_${settings.realism.seed}_${settings.realism.jitterX}_${settings.realism.jitterY}_${settings.realism.slant}_${settings.realism.pressureVariance}`;
-  let offscreenCanvas = textCache.get(cacheKey);
-  if (!offscreenCanvas && typeof window !== "undefined") {
+  const pageLines = lines.filter(l => l.pageIndex === pageIndex);
+  const glyphsRep = pageLines.map(l => l.glyphs.map(g => `${g.char}_${Math.round(g.x)}_${Math.round(g.y)}_${g.fontSize ?? ''}_${g.bold ? 'b' : ''}_${g.italic ? 'i' : ''}_${g.underline ? 'u' : ''}_${g.highlight ? 'h' : ''}_${g.strikethrough ? 's' : ''}_${g.color ?? ''}`).join('|')).join('\n');
+
+  const cacheKey = `${glyphsRep}_${pageIndex}_${fontFamily}_${settings.fontSize}_${settings.inkColor}_${settings.smartQA}_${settings.autoHeadings}_${settings.realism.seed}_${settings.realism.jitterX}_${settings.realism.jitterY}_${settings.realism.slant}_${settings.realism.pressureVariance}`;
+  
+  let offscreenCanvas: HTMLCanvasElement | null = null;
+  const cached = textCache.get(pageIndex);
+  if (cached && cached.key === cacheKey) {
+    offscreenCanvas = cached.canvas;
+  } else if (typeof window !== "undefined") {
     offscreenCanvas = renderTextToOffscreen();
-    textCache.set(cacheKey, offscreenCanvas);
-    while (textCache.size > MAX_TEXT_CACHE_ENTRIES) {
-      const oldestKey = textCache.keys().next().value;
-      if (oldestKey === undefined) break;
-      textCache.delete(oldestKey);
-    }
+    textCache.set(pageIndex, { key: cacheKey, canvas: offscreenCanvas });
   }
 
   if (offscreenCanvas) {

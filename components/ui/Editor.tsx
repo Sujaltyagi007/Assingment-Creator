@@ -109,6 +109,7 @@ export default function Editor() {
           onSaveDocument={handleSaveDocument}
           onLoadDocument={handleLoadDocument}
           pageCount={doc.pages.length}
+          fontFamily={fontFamily}
         />
       </div>
 

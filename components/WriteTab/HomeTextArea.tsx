@@ -22,6 +22,7 @@ export interface HomeTextAreaProps {
     onAddImage?: (src: string, width: number, height: number) => void;
     onFormatText?: (tag: string, value?: string) => void;
     baseFontSize?: number;
+    fontFamily?: string;
 }
 
 function bbcodeToHtml(text: string, baseFontSize: number = 28): string {
@@ -134,7 +135,7 @@ function htmlToBbcode(html: string, baseFontSize: number = 28): string {
     return bbcode.replace(/^(?:[ \t]*\n)+/, "");
 }
 
-export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectionChange, onAddImage, onFormatText, baseFontSize = 28 }: HomeTextAreaProps) => {
+export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectionChange, onAddImage, onFormatText, baseFontSize = 28, fontFamily }: HomeTextAreaProps) => {
     const editableRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const lastEmittedRef = useRef<string | null>(null);
@@ -389,7 +390,7 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
         <div className="flex-1 flex flex-col rounded-2xl bg-zinc-50 border border-zinc-200 dark:bg-[#13131a] dark:border-[#232330] h-full p-4 shadow-inner min-h-62.5 sm:min-h-87.5 relative pb-12 transition-colors duration-200">
             <div ref={editableRef} contentEditable onInput={handleInput} onPaste={handlePaste} onKeyDown={handleKeyDown}
                 onSelect={handleSelect} onKeyUp={handleSelect} onMouseUp={handleSelect} onTouchEnd={handleSelect}
-                spellCheck={autoCorrect} className="w-full flex-1 bg-transparent text-zinc-900 placeholder-zinc-400 dark:text-zinc-100 dark:placeholder-zinc-600 focus:outline-none resize-none font-sans text-sm leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none [&>div]:m-0 [&>div[style*='text-align: center']]:m-0" style={{ minHeight: "150px" }}
+                spellCheck={autoCorrect} className="w-full flex-1 bg-transparent text-zinc-900 placeholder-zinc-400 dark:text-zinc-100 dark:placeholder-zinc-600 focus:outline-none resize-none font-sans text-sm leading-relaxed overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none [&>div]:m-0 [&>div[style*='text-align: center']]:m-0" style={{ minHeight: "150px", fontFamily: fontFamily }}
             />
             <div className="absolute bottom-3 left-4 flex items-center gap-2">
                 <input type="file" accept=".svg" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
