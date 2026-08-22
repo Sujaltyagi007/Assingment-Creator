@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 
-export function useFormatText(baseFontSize: number = 28) {
+export function useFormatText(baseFontSize: number = 20) {
     const [hasSelection, setHasSelection] = useState(false);
     const textareaRef = useRef<HTMLElement | null>(null);
     const savedRangeRef = useRef<Range | null>(null);

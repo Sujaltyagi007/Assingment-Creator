@@ -22,10 +22,9 @@ export interface HomeTextAreaProps {
     onAddImage?: (src: string, width: number, height: number) => void;
     onFormatText?: (tag: string, value?: string) => void;
     baseFontSize?: number;
-    fontFamily?: string;
 }
 
-function bbcodeToHtml(text: string, baseFontSize: number = 28): string {
+function bbcodeToHtml(text: string, baseFontSize: number = 20): string {
     let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
         .replace(/\[center\]([\s\S]*?)\[\/center\]/g, '<div style="text-align: center;">$1</div>')
         .replace(/\[right\]([\s\S]*?)\[\/right\]/g, '<div style="text-align: right;">$1</div>')
@@ -62,9 +61,9 @@ const isFormattingBoundary = (n: Node | null): boolean => {
     return tag === "br" || BLOCK_TAGS.includes(tag);
 };
 
-function htmlToBbcode(root: HTMLElement, baseFontSize: number = 28, selectionRange?: Range | null): { bbcode: string, cursorIndex: number | null } {
+function htmlToBbcode(root: HTMLElement, baseFontSize: number = 20, selectionRange?: Range | null): { bbcode: string, cursorIndex: number | null } {
     if (typeof document === "undefined") return { bbcode: root.innerHTML, cursorIndex: null };
-    
+
     let currentBbcodeLength = 0;
     let foundCursorIndex: number | null = null;
 
@@ -74,10 +73,10 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 28, selectionRan
         if (node.nodeType === Node.TEXT_NODE) {
             let raw = node.textContent || "";
             let generated = "";
-            
+
             const supMap: Record<string, string> = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')', 'ⁿ': 'n' };
             for (const [uni, normal] of Object.entries(supMap)) { raw = raw.split(uni).join(`[sup]${normal}[/sup]`); }
-            
+
             if (!raw.includes("\n")) {
                 generated = raw;
             } else {
@@ -90,25 +89,24 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 28, selectionRan
             }
 
             if (selectionRange && node === selectionRange.startContainer) {
-                // Approximate offset inside the text node
                 foundCursorIndex = currentBbcodeLength + Math.min(selectionRange.startOffset, generated.length);
             }
             currentBbcodeLength += generated.length;
             return generated;
         }
-        
+
         if (node.nodeType === Node.ELEMENT_NODE) {
             const el = node as HTMLElement;
-            
+
             if (selectionRange && node === selectionRange.startContainer && selectionRange.startOffset === 0) {
-                 foundCursorIndex = currentBbcodeLength;
+                foundCursorIndex = currentBbcodeLength;
             }
 
             let text = "";
             el.childNodes.forEach(child => { text += parseNode(child); });
-            
+
             if (selectionRange && node === selectionRange.startContainer && selectionRange.startOffset > 0) {
-                 if (foundCursorIndex === null) foundCursorIndex = currentBbcodeLength;
+                if (foundCursorIndex === null) foundCursorIndex = currentBbcodeLength;
             }
 
             const tag = el.tagName.toLowerCase();
@@ -146,7 +144,7 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 28, selectionRan
             if (isCenter && fText.trim()) fText = `[center]${fText}[/center]`;
             else if (isRight && fText.trim()) fText = `[right]${fText}[/right]`;
             else if (isLeft && fText.trim()) fText = `[left]${fText}[/left]`;
-            
+
             let finalGenerated = fText;
             if (tag === "br") {
                 finalGenerated = "\n";
@@ -161,15 +159,10 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 28, selectionRan
             }
 
             currentBbcodeLength = textBeforeNode + finalGenerated.length;
-            
-            // Adjust cursor index if it was found inside this element, to account for added prefix tags
             if (foundCursorIndex !== null && foundCursorIndex >= textBeforeNode && foundCursorIndex <= textBeforeNode + text.length) {
                 const prefixLength = finalGenerated.indexOf(text);
-                if (prefixLength > 0) {
-                    foundCursorIndex += prefixLength;
-                }
+                if (prefixLength > 0) { foundCursorIndex += prefixLength; }
             }
-
             return finalGenerated;
         }
         return "";
@@ -177,8 +170,7 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 28, selectionRan
 
     let bbcode = "";
     root.childNodes.forEach(child => { bbcode += parseNode(child); });
-    
-    // Strip leading newlines and adjust cursor index
+
     const strippedMatch = bbcode.match(/^(?:[ \t]*\n)+/);
     if (strippedMatch) {
         bbcode = bbcode.substring(strippedMatch[0].length);
@@ -186,11 +178,11 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 28, selectionRan
             foundCursorIndex = Math.max(0, foundCursorIndex - strippedMatch[0].length);
         }
     }
-    
+
     return { bbcode, cursorIndex: foundCursorIndex };
 }
 
-export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectionChange, onAddImage, onFormatText, baseFontSize = 28, fontFamily }: HomeTextAreaProps) => {
+export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectionChange, onAddImage, onFormatText, baseFontSize = 20 }: HomeTextAreaProps) => {
     const editableRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const lastEmittedRef = useRef<string | null>(null);

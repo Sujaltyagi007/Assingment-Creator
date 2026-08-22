@@ -33,8 +33,8 @@ export default function Sidebar({ content, onContentChange, onAddImage, settings
         if (preset === "standard") {
             onUpdateSettings({
                 marginPreset: "standard",
-                topMargin: 105,
-                leftMargin: 105,
+                topMargin: 100,
+                leftMargin: 100,
             });
         } else {
             onUpdateSettings({

@@ -8,7 +8,6 @@ export interface RealismSettings {
 
 export interface GlobalSettings {
   font: string;
-  /** "builtin" = loaded via next/font, "custom" = uploaded by user via FontFace API */
   fontSource: "builtin" | "custom";
   bold: boolean;
   italic: boolean;
@@ -58,7 +57,7 @@ export interface TextElement {
 export interface ImageElement {
   type: "image";
   id: string;
-  src: string; // object URL or base64 
+  src: string;
   x: number;
   y: number;
   width: number;
