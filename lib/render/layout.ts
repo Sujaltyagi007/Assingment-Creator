@@ -150,7 +150,13 @@ export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
       line.forEach(g => g.x += shiftX);
     }
     lines.push({ glyphs: line, pageIndex: pageIdx });
-    if ((curY += lineH) > pageHeight - margins.bottom) { curY = margins.top + fontSize + lineH; pageIdx++; }
+    const effectiveLineH = line.length > 0
+      ? Math.max(...line.map(g => {
+          const base = g.fontSize || fontSize;
+          return (g.sup || g.sub) ? base * 0.65 : base;
+        })) * lineSpacing
+      : lineH;
+    if ((curY += effectiveLineH) > pageHeight - margins.bottom) { curY = margins.top + fontSize + lineH; pageIdx++; }
   };
 
   const paras: StyledChar[][] = [[]];

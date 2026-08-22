@@ -62,9 +62,11 @@ Input Text (`HomeTextArea.tsx`) -> BBCode String (`[b]text[/b]`) -> State (`Docu
 - **Canvas Units:** The canvas operates on a fixed logical resolution (`PAGE_WIDTH_PX = 794`, `PAGE_HEIGHT_PX = 1123` - representing A4 at 96 DPI). Zooming is handled by scaling the canvas CSS or context transform, keeping the logical coordinate system stable.
 
 ## Known Issues / Gotchas
-- **Font Loading:** Text measurement in `layout.ts` depends on fonts being fully loaded. If a font is swapped or slow to load, text might wrap incorrectly until the next render cycle.
-- **BBCode Translation Constraints:** The round-trip between contenteditable HTML and BBCode can occasionally lose extremely complex nested formatting.
-- **Cursor Synchronization:** To prevent the canvas preview from scrolling to the wrong page during edits, `htmlToBbcode` now computes and returns the cursor's `bbcodeIndex` (matching the HTML selection offset) to accurately synchronize the edited word's position in `useEditorLogic.ts`.
+- **Font Loading (mitigated):** `useEditorLogic.ts` now extracts the plain primary font name (e.g. `"Caveat"`) in the `useState` initialiser instead of the raw Next.js CSS variable string. The async `document.fonts.load()` effect still runs to guarantee readiness before the first re-render, eliminating the visible fallback-font flash on load.
+- **BBCode Translation Constraints:** The round-trip between contenteditable HTML and BBCode can occasionally lose extremely complex nested formatting. Known fixed: `[center]`/`[right]`/`[left]` blocks containing newlines — `bbcodeToHtml` now emits one `<div>` per logical line instead of one multi-line div, so each line is independently round-trippable.
+- **Cursor Synchronization:** `htmlToBbcode` computes and returns the cursor's `bbcodeIndex` to accurately synchronize the edited word's position in `useEditorLogic.ts`.
+- **Center alignment scope:** `document.execCommand("justifyCenter")` is block-level — it always aligns the entire paragraph. Partial-selection centering of a single word is a browser limitation with no clean DOM workaround.
 
 ## Last Updated
 - 2026-08-22: Updated `htmlToBbcode` to return exact cursor coordinates to fix unpredictable page scrolling. Enforced specific DOM-element removal on Enter key to ensure new lines are strictly left-aligned.
+- 2026-08-22: Fixed three UX bugs — (1) `bbcodeToHtml` now splits center/right/left blocks on `\n` emitting one `<div>` per logical line, preventing center alignment from permanently coupling adjacent lines. (2) `layout.ts` `pushLine` now computes per-line effective height from each line's max font size instead of the fixed global `lineH`, fixing visual merging when centered text has a larger font than the global setting. (3) `useEditorLogic.ts` initial `fontFamily` state now extracts the plain font name, fixing the race window where canvas rendered in a fallback font.

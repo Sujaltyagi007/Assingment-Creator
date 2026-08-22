@@ -23,7 +23,9 @@ export function useEditorLogic() {
 
   const [fontFamily, setFontFamily] = useState<string>(() => {
     const activeFont = fontsMap[doc.globalSettings.font as FontKey] || caveat;
-    return activeFont.style.fontFamily;
+    const fontName = activeFont.style.fontFamily;
+    const primary = fontName.split(",")[0].trim().replace(/['"]/g, "");
+    return primary || doc.globalSettings.font;
   });
 
   const { handleExportPNG, handleExportPDF } = useExport(canvasRef, doc, fontFamily, globalTextContent);

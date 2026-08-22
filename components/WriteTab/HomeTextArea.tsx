@@ -26,9 +26,21 @@ export interface HomeTextAreaProps {
 
 function bbcodeToHtml(text: string, baseFontSize: number = 20): string {
     let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-        .replace(/\[center\]([\s\S]*?)\[\/center\]/g, '<div style="text-align: center;">$1</div>')
-        .replace(/\[right\]([\s\S]*?)\[\/right\]/g, '<div style="text-align: right;">$1</div>')
-        .replace(/\[left\]([\s\S]*?)\[\/left\]/g, '<div style="text-align: left;">$1</div>')
+        .replace(/\[center\]([\s\S]*?)\[\/center\]/g, (_m: string, inner: string) =>
+            inner.split('\n').map((line: string) =>
+                `<div style="text-align: center;">${line !== '' ? line : '<br>'}</div>`
+            ).join('')
+        )
+        .replace(/\[right\]([\s\S]*?)\[\/right\]/g, (_m: string, inner: string) =>
+            inner.split('\n').map((line: string) =>
+                `<div style="text-align: right;">${line !== '' ? line : '<br>'}</div>`
+            ).join('')
+        )
+        .replace(/\[left\]([\s\S]*?)\[\/left\]/g, (_m: string, inner: string) =>
+            inner.split('\n').map((line: string) =>
+                `<div style="text-align: left;">${line !== '' ? line : '<br>'}</div>`
+            ).join('')
+        )
         .replace(/\[b\]/g, "<strong>").replace(/\[\/b\]/g, "</strong>")
         .replace(/\[i\]/g, "<em>").replace(/\[\/i\]/g, "</em>")
         .replace(/\[u\]/g, "<u>").replace(/\[\/u\]/g, "</u>")
@@ -154,6 +166,17 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 20, selectionRan
                     finalGenerated = fText.replace(/\n$/, "");
                     if (!finalGenerated.startsWith("\n")) {
                         finalGenerated = finalGenerated ? "\n" + finalGenerated : "\n";
+                    }
+                    
+                    let next = el.nextSibling;
+                    while (next && next.nodeType === Node.TEXT_NODE && next.textContent === "") {
+                        next = next.nextSibling;
+                    }
+                    if (next) {
+                        const nextIsBlock = next.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.includes((next as HTMLElement).tagName.toLowerCase());
+                        if (!nextIsBlock) {
+                            finalGenerated += "\n";
+                        }
                     }
                 }
             }
@@ -391,36 +414,6 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
     }, [pendingPaste]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (e.key === "Enter") {
-            // Reset text alignment for the new line by targeting the new block element
-            setTimeout(() => {
-                const sel = window.getSelection();
-                if (!sel || sel.rangeCount === 0) return;
-                let node = sel.anchorNode;
-                if (!node) return;
-                if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
-
-                let block = node as HTMLElement;
-                while (block && block !== editableRef.current) {
-                    const tag = block.tagName.toLowerCase();
-                    if (tag === 'div' || tag === 'p' || tag === 'h1' || tag === 'h2') {
-                        break;
-                    }
-                    block = block.parentElement as HTMLElement;
-                }
-
-                if (block && block !== editableRef.current) {
-                    if (block.style.textAlign === 'center' || block.style.textAlign === 'right' || block.getAttribute('align')) {
-                        block.style.textAlign = '';
-                        block.removeAttribute('align');
-                        if (editableRef.current) {
-                            editableRef.current.dispatchEvent(new Event("input", { bubbles: true }));
-                        }
-                    }
-                }
-            }, 0);
-        }
-
         if (!onFormatText) return;
 
         // Ctrl+Shift+> or Ctrl+Shift+.
