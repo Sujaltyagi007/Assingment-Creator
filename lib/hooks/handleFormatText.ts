@@ -102,7 +102,16 @@ export function useFormatText(baseFontSize: number = 20) {
             case "h": const color = isSelectionHighlighted() ? "transparent" : "#fef08a";
                 try { exec("hiliteColor", color); } catch { exec("backColor", color); }
                 break;
-            case "color": exec("foreColor", value); break;
+            case "color":
+                exec("foreColor", value);
+                if (sel && sel.rangeCount > 0) {
+                    Array.from(element.querySelectorAll('.math-frac')).forEach(frac => {
+                        if (sel.containsNode(frac, true)) {
+                            (frac as HTMLElement).style.color = value!;
+                        }
+                    });
+                }
+                break;
             case "frac":
                 if (value) {
                     const [num, den] = value.split("/");
@@ -123,16 +132,10 @@ export function useFormatText(baseFontSize: number = 20) {
 
                     while (parentEl && parentEl !== element) {
                         const dataSize = parentEl.getAttribute("data-size");
-                        if (dataSize) {
-                            currentSize = parseInt(dataSize, 10);
-                            break;
-                        }
+                        if (dataSize) { currentSize = parseInt(dataSize, 10); break; }
                         if (parentEl.style.fontSize) {
                             const uiSize = parseInt(parentEl.style.fontSize, 10);
-                            if (!isNaN(uiSize)) {
-                                currentSize = Math.round(uiSize * (baseFontSize / 14));
-                                break;
-                            }
+                            if (!isNaN(uiSize)) { currentSize = Math.round(uiSize * (baseFontSize / 14)); break; }
                         }
                         parentEl = parentEl.parentElement;
                     }
@@ -156,6 +159,14 @@ export function useFormatText(baseFontSize: number = 20) {
                         }
                     });
                 });
+
+                Array.from(element.querySelectorAll('.math-frac')).forEach(frac => {
+                    if (sel.containsNode(frac, true)) {
+                        (frac as HTMLElement).style.fontSize = `${uiSize}px`;
+                        frac.setAttribute("data-size", targetSize.toString());
+                    }
+                });
+
                 exec("styleWithCSS", "true");
                 break;
         }

@@ -151,9 +151,9 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 20, selectionRan
                 }
             }
 
-            const isCenter = tag === "center" || el.style.textAlign === "center" || el.getAttribute("align") === "center";
-            const isRight = el.style.textAlign === "right" || el.getAttribute("align") === "right";
-            const isLeft = el.style.textAlign === "left" || el.getAttribute("align") === "left";
+            const isCenter = !isMathFrac && (tag === "center" || el.style.textAlign === "center" || el.getAttribute("align") === "center");
+            const isRight = !isMathFrac && (el.style.textAlign === "right" || el.getAttribute("align") === "right");
+            const isLeft = !isMathFrac && (el.style.textAlign === "left" || el.getAttribute("align") === "left");
 
             let fText = text;
             if (tag === "strong" || tag === "b" || el.style.fontWeight === "bold" || parseInt(el.style.fontWeight, 10) >= 700) fText = `[b]${fText}[/b]`;
@@ -590,8 +590,20 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
         }
     };
 
-    const handleSelect = useCallback(() => {
+    const handleSelect = useCallback((e?: any) => {
         const selection = window.getSelection();
+
+        if (e && (e.type === "mouseup" || e.type === "touchend") && e.target) {
+            const target = e.target as HTMLElement;
+            const frac = target.closest?.('.math-frac');
+            if (frac) {
+                const range = document.createRange();
+                range.selectNode(frac);
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+            }
+        }
+
         const hasSel = !!selection && !!editableRef.current && editableRef.current.contains(selection.anchorNode);
         if (onSelectionChange && editableRef.current) {
             onSelectionChange(hasSel, 0, 0, editableRef.current);
