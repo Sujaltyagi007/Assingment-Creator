@@ -49,7 +49,7 @@ function bbcodeToHtml(text: string, baseFontSize: number = 20): string {
         .replace(/\[\/s\]/g, "</s>")
         .replace(/\[sup\]/g, "<sup>").replace(/\[\/sup\]/g, "</sup>")
         .replace(/\[sub\]/g, "<sub>").replace(/\[\/sub\]/g, "</sub>")
-        .replace(/\[frac=([^\]]+)\]([\s\S]*?)\[\/frac\]/g, '<span class="math-frac" contenteditable="false" style="display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 4px; line-height: 1;"><span class="math-num" style="border-bottom: 1px solid currentColor; padding: 0 2px;">$1</span><span class="math-den" style="padding: 0 2px;">$2</span></span>')
+        .replace(/\[frac=([^\]]+)\]([\s\S]*?)\[\/frac\]/g, '<span class="math-frac" contenteditable="false" style="display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 4px; line-height: 1;"><span class="math-num" style="border-bottom: 1px solid currentColor; padding: 0 2px;">$1</span><span class="math-den" style="padding: 0 2px;">$2</span></span>&#8203;')
         .replace(/\[size=([^\]]+)\]/g, (sizeStr) => {
             const canvasSize = parseInt(sizeStr, 10);
             const uiSize = Math.round(canvasSize * (14 / baseFontSize));
@@ -84,7 +84,7 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 20, selectionRan
         let textBeforeNode = currentBbcodeLength;
 
         if (node.nodeType === Node.TEXT_NODE) {
-            let raw = node.textContent || "";
+            let raw = (node.textContent || "").replace(/\u200B/g, "");
             let generated = "";
 
             const supMap: Record<string, string> = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')', 'ⁿ': 'n' };
@@ -115,21 +115,21 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 20, selectionRan
                 foundCursorIndex = currentBbcodeLength;
             }
 
+            let text = "";
+            let isMathFrac = false;
+
             if (el.classList.contains("math-frac")) {
                 const numEl = el.querySelector(".math-num");
                 const denEl = el.querySelector(".math-den");
                 if (numEl && denEl) {
                     const numText = numEl.textContent || "";
                     const denText = denEl.textContent || "";
-                    let finalGenerated = `[frac=${numText}]${denText}[/frac]`;
-                    currentBbcodeLength = textBeforeNode + finalGenerated.length;
-                    return finalGenerated;
+                    text = `[frac=${numText}]${denText}[/frac]`;
+                    isMathFrac = true;
                 }
             }
 
-            let text = "";
-            el.childNodes.forEach(child => { text += parseNode(child); });
-
+            if (!isMathFrac) { el.childNodes.forEach(child => { text += parseNode(child); }); }
             if (selectionRange && node === selectionRange.startContainer && selectionRange.startOffset > 0) {
                 if (foundCursorIndex === null) foundCursorIndex = currentBbcodeLength;
             }
@@ -180,7 +180,7 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 20, selectionRan
                     if (!finalGenerated.startsWith("\n")) {
                         finalGenerated = finalGenerated ? "\n" + finalGenerated : "\n";
                     }
-                    
+
                     let next = el.nextSibling;
                     while (next && next.nodeType === Node.TEXT_NODE && next.textContent === "") {
                         next = next.nextSibling;
@@ -424,10 +424,10 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
 
     const handlePasteAction = useCallback((apply: boolean) => {
         if (!pendingPaste) return;
-        
+
         let newContent = pendingPaste.content;
         const currentAction = pendingPaste.queue[0];
-        
+
         if (apply) {
             if (currentAction === 'dollars') {
                 newContent = newContent.replace(/\$/g, '');
@@ -443,9 +443,9 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                 });
             }
         }
-        
+
         const nextQueue = pendingPaste.queue.slice(1);
-        
+
         if (nextQueue.length === 0) {
             executePasteFinal(newContent);
             setPendingPaste(null);

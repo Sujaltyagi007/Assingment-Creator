@@ -13,12 +13,7 @@ export function useCanvasInteraction(canvasRef: React.RefObject<HTMLCanvasElemen
   });
 
   useEffect(() => {
-    setInteraction(s => ({
-      ...s,
-      draggingElementId: null,
-      resizingElementId: null,
-      selectedImageId: null
-    }));
+    setInteraction(s => ({ ...s, draggingElementId: null, resizingElementId: null, selectedImageId: null }));
   }, [activePage.id]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -86,7 +81,7 @@ export function useCanvasInteraction(canvasRef: React.RefObject<HTMLCanvasElemen
         }
       }
       canvas.style.cursor = hoveringType === "resize" ? "nwse-resize" : hoveringType === "grab" ? "grab" : "default";
-      
+
       if (interactionRef.current.selectedImageId !== hId) {
         setInteraction(s => ({ ...s, selectedImageId: hId }));
       }
@@ -96,7 +91,6 @@ export function useCanvasInteraction(canvasRef: React.RefObject<HTMLCanvasElemen
     const rect = canvas.getBoundingClientRect();
     const scaleX = PAGE_WIDTH_PX / rect.width;
     const scaleY = PAGE_HEIGHT_PX / rect.height;
-
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
     latestCoords.current = { x, y };
@@ -123,10 +117,7 @@ export function useCanvasInteraction(canvasRef: React.RefObject<HTMLCanvasElemen
               type: "UPDATE_ELEMENT",
               pageId: activePage.id,
               elementId: currentInter.resizingElementId,
-              updates: {
-                width: newWidth,
-                height: newHeight,
-              },
+              updates: { width: newWidth, height: newHeight },
             });
           }
         }

@@ -103,6 +103,13 @@ export function useFormatText(baseFontSize: number = 20) {
                 try { exec("hiliteColor", color); } catch { exec("backColor", color); }
                 break;
             case "color": exec("foreColor", value); break;
+            case "frac":
+                if (value) {
+                    const [num, den] = value.split("/");
+                    const html = `<span class="math-frac" contenteditable="false" style="display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 4px; line-height: 1;"><span class="math-num" style="border-bottom: 1px solid currentColor; padding: 0 2px;">${num}</span><span class="math-den" style="padding: 0 2px;">${den}</span></span>&#8203;`;
+                    exec("insertHTML", html);
+                }
+                break;
             case "size":
             case "size-inc":
             case "size-dec":

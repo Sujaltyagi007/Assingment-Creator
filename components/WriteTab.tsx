@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 
 type Props = {
     hasSelection: boolean;
@@ -24,6 +24,18 @@ const nmBtn = "bg-zinc-100 dark:bg-[#16161e] shadow-[2px_2px_4px_#d4d4d8,-2px_-2
 const nmBtnActive = "bg-zinc-100 dark:bg-[#16161e] shadow-[inset_2px_2px_4px_#d4d4d8,inset_-2px_-2px_4px_#ffffff] dark:shadow-[inset_2px_2px_4px_#0b0b0f,inset_-2px_-2px_4px_#21212d] transition-shadow duration-200 border-none text-primary";
 
 export const WriteTab = React.memo(({ hasSelection, onFormatText, onAddImage, activeFormats = { bold: false, italic: false, underline: false, strikethrough: false, highlight: false, center: false, alignLeft: false, alignRight: false, superscript: false, subscript: false } }: Props) => {
+    const [showFracPopup, setShowFracPopup] = useState(false);
+    const [fracNum, setFracNum] = useState("");
+    const [fracDen, setFracDen] = useState("");
+
+    const handleInsertFrac = () => {
+        if (fracNum && fracDen) {
+            onFormatText("frac", `${fracNum}/${fracDen}`);
+            setShowFracPopup(false);
+            setFracNum("");
+            setFracDen("");
+        }
+    };
     return (
         <div className={`relative w-full rounded-full transition-all duration-300 p-[1.5px] ${nmOuter}`}>
             <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none drop-shadow-[0_0_8px_#ff5533]">
@@ -42,7 +54,6 @@ export const WriteTab = React.memo(({ hasSelection, onFormatText, onAddImage, ac
                         <span className="size-full rounded-full bg-[#dc2626]" />
                     </button>
                 </div>
-
                 <div className={`flex items-center ml-auto gap-1 transition-all duration-300 ease-in-out ${hasSelection ? "opacity-100 pr-1" : "opacity-40 pointer-events-none select-none"}`}>
                     <div className="h-5 w-px bg-zinc-300 dark:bg-zinc-700/60 shrink-0 mr-1 shadow-[1px_0_1px_#ffffff] dark:shadow-[1px_0_1px_#21212d]" />
                     <button type="button" title="Increase Font Size" onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => onFormatText("size-inc")} className={`w-7 h-7 flex items-center justify-center rounded-full text-zinc-600 dark:text-zinc-400 cursor-pointer text-xs font-semibold shrink-0 ${nmBtn}`}                >
@@ -99,9 +110,28 @@ export const WriteTab = React.memo(({ hasSelection, onFormatText, onAddImage, ac
                         <button type="button" onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => onFormatText("sub")} className={`w-7 h-7 flex items-center justify-center rounded-full font-sans cursor-pointer text-xs ${activeFormats.subscript ? nmBtnActive : nmBtn}`} title="Subscript">
                             x<sub>n</sub>
                         </button>
+                        <div className="flex items-center gap-2.5 shrink-0 ml-1 relative">
+                            <button type="button" onMouseDown={(e) => e.preventDefault()} onTouchStart={(e) => e.preventDefault()} onClick={() => setShowFracPopup(true)} className={`w-7 h-7 flex items-center justify-center rounded-full font-sans cursor-pointer text-xs text-zinc-600 dark:text-zinc-400 ${nmBtn}`} title="Insert Fraction">
+                                <span className="flex flex-col items-center justify-center text-[10px] leading-none font-bold">
+                                    <span className="border-b border-current px-px">a</span>
+                                    <span className="px-px">b</span>
+                                </span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
+            {showFracPopup && (
+                <div className="absolute top-[110%] left-24 z-60 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-xl rounded-lg p-3 flex flex-col gap-2 w-48 animate-in fade-in zoom-in duration-200">
+                    <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-1">Insert Fraction</span>
+                    <input type="text" placeholder="Numerator" value={fracNum} onChange={(e) => setFracNum(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && document.getElementById('fracDenInput')?.focus()} className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-500" autoFocus />
+                    <input id="fracDenInput" type="text" placeholder="Denominator" value={fracDen} onChange={(e) => setFracDen(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleInsertFrac()} className="w-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-blue-500" />
+                    <div className="flex justify-end gap-2 mt-1">
+                        <button type="button" onClick={() => setShowFracPopup(false)} className="px-2 py-1 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 cursor-pointer">Cancel</button>
+                        <button type="button" onClick={handleInsertFrac} className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium cursor-pointer">Insert</button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 });
