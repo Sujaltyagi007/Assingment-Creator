@@ -16,7 +16,7 @@ declare global {
 
 export interface HomeTextAreaProps {
     content: string;
-    onContentChange: (content: string) => void;
+    onContentChange: (content: string, cursorIndex?: number) => void;
     autoCorrect?: boolean;
     onSelectionChange?: (hasSelection: boolean, selectionStart: number, selectionEnd: number, element: HTMLElement) => void;
     onAddImage?: (src: string, width: number, height: number) => void;
@@ -62,33 +62,55 @@ const isFormattingBoundary = (n: Node | null): boolean => {
     return tag === "br" || BLOCK_TAGS.includes(tag);
 };
 
-function htmlToBbcode(html: string, baseFontSize: number = 28): string {
-    if (typeof document === "undefined") return html;
-    const temp = document.createElement("div");
-    temp.innerHTML = html;
+function htmlToBbcode(root: HTMLElement, baseFontSize: number = 28, selectionRange?: Range | null): { bbcode: string, cursorIndex: number | null } {
+    if (typeof document === "undefined") return { bbcode: root.innerHTML, cursorIndex: null };
+    
+    let currentBbcodeLength = 0;
+    let foundCursorIndex: number | null = null;
 
     const parseNode = (node: Node): string => {
+        let textBeforeNode = currentBbcodeLength;
+
         if (node.nodeType === Node.TEXT_NODE) {
             let raw = node.textContent || "";
-            // Replace unicode superscripts (often created by OS autocorrect for ^2) with BBCode sup tags
-            // so they use the handwritten font instead of falling back to system fonts (which look uneven).
-            const supMap: Record<string, string> = {
-                '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
-                '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')', 'ⁿ': 'n'
-            };
-            for (const [uni, normal] of Object.entries(supMap)) {
-                raw = raw.split(uni).join(`[sup]${normal}[/sup]`);
+            let generated = "";
+            
+            const supMap: Record<string, string> = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')', 'ⁿ': 'n' };
+            for (const [uni, normal] of Object.entries(supMap)) { raw = raw.split(uni).join(`[sup]${normal}[/sup]`); }
+            
+            if (!raw.includes("\n")) {
+                generated = raw;
+            } else {
+                const collapsed = raw.replace(/[ \t]*\n[ \t]*/g, " ");
+                if (collapsed.trim() !== "") {
+                    generated = collapsed;
+                } else {
+                    generated = isFormattingBoundary(node.previousSibling) || isFormattingBoundary(node.nextSibling) ? "" : " ";
+                }
             }
 
-            if (!raw.includes("\n")) return raw;
-            const collapsed = raw.replace(/[ \t]*\n[ \t]*/g, " ");
-            if (collapsed.trim() !== "") return collapsed;
-            return isFormattingBoundary(node.previousSibling) || isFormattingBoundary(node.nextSibling) ? "" : " ";
+            if (selectionRange && node === selectionRange.startContainer) {
+                // Approximate offset inside the text node
+                foundCursorIndex = currentBbcodeLength + Math.min(selectionRange.startOffset, generated.length);
+            }
+            currentBbcodeLength += generated.length;
+            return generated;
         }
+        
         if (node.nodeType === Node.ELEMENT_NODE) {
             const el = node as HTMLElement;
+            
+            if (selectionRange && node === selectionRange.startContainer && selectionRange.startOffset === 0) {
+                 foundCursorIndex = currentBbcodeLength;
+            }
+
             let text = "";
             el.childNodes.forEach(child => { text += parseNode(child); });
+            
+            if (selectionRange && node === selectionRange.startContainer && selectionRange.startOffset > 0) {
+                 if (foundCursorIndex === null) foundCursorIndex = currentBbcodeLength;
+            }
+
             const tag = el.tagName.toLowerCase();
             const bg = el.style.backgroundColor || el.style.background || el.getAttribute("bgcolor");
             const hasBg = bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)" && bg !== "none";
@@ -120,53 +142,81 @@ function htmlToBbcode(html: string, baseFontSize: number = 28): string {
             if (tag === "mark" || hasBg) fText = `[h]${fText}[/h]`;
             if (textColor && !hasBg) fText = `[color=${textColor}]${fText}[/color]`;
             if (sizeVal) fText = `[size=${sizeVal}]${fText}[/size]`;
-            
+
             if (isCenter && fText.trim()) fText = `[center]${fText}[/center]`;
             else if (isRight && fText.trim()) fText = `[right]${fText}[/right]`;
             else if (isLeft && fText.trim()) fText = `[left]${fText}[/left]`;
-            if (tag === "br") return "\n";
-
-            const isBlock = BLOCK_TAGS.includes(tag);
-            if (isBlock) {
-                fText = fText.replace(/\n$/, "");
-                if (fText.startsWith("\n")) return fText;
-                return fText ? "\n" + fText : "\n";
+            
+            let finalGenerated = fText;
+            if (tag === "br") {
+                finalGenerated = "\n";
+            } else {
+                const isBlock = BLOCK_TAGS.includes(tag);
+                if (isBlock) {
+                    finalGenerated = fText.replace(/\n$/, "");
+                    if (!finalGenerated.startsWith("\n")) {
+                        finalGenerated = finalGenerated ? "\n" + finalGenerated : "\n";
+                    }
+                }
             }
-            return fText;
+
+            currentBbcodeLength = textBeforeNode + finalGenerated.length;
+            
+            // Adjust cursor index if it was found inside this element, to account for added prefix tags
+            if (foundCursorIndex !== null && foundCursorIndex >= textBeforeNode && foundCursorIndex <= textBeforeNode + text.length) {
+                const prefixLength = finalGenerated.indexOf(text);
+                if (prefixLength > 0) {
+                    foundCursorIndex += prefixLength;
+                }
+            }
+
+            return finalGenerated;
         }
         return "";
     };
 
     let bbcode = "";
-    temp.childNodes.forEach(child => { bbcode += parseNode(child); });
-    return bbcode.replace(/^(?:[ \t]*\n)+/, "");
+    root.childNodes.forEach(child => { bbcode += parseNode(child); });
+    
+    // Strip leading newlines and adjust cursor index
+    const strippedMatch = bbcode.match(/^(?:[ \t]*\n)+/);
+    if (strippedMatch) {
+        bbcode = bbcode.substring(strippedMatch[0].length);
+        if (foundCursorIndex !== null) {
+            foundCursorIndex = Math.max(0, foundCursorIndex - strippedMatch[0].length);
+        }
+    }
+    
+    return { bbcode, cursorIndex: foundCursorIndex };
 }
 
 export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectionChange, onAddImage, onFormatText, baseFontSize = 28, fontFamily }: HomeTextAreaProps) => {
     const editableRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const lastEmittedRef = useRef<string | null>(null);
+    const savedPasteSelectionRef = useRef<Range | null>(null);
+    const [pendingPaste, setPendingPaste] = useState<{ content: string, isHtml: boolean } | null>(null);
     useEffect(() => { lastEmittedRef.current = null; }, [baseFontSize]);
     useEffect(() => {
         if (editableRef.current && content !== lastEmittedRef.current) {
-            const currentHtml = editableRef.current.innerHTML;
+            const currentHtml = editableRef.current;
             const expectedHtml = bbcodeToHtml(content, baseFontSize);
-            if (htmlToBbcode(currentHtml, baseFontSize) !== content) { editableRef.current.innerHTML = expectedHtml; }
+            if (htmlToBbcode(currentHtml, baseFontSize).bbcode !== content) { editableRef.current.innerHTML = expectedHtml; }
         }
     }, [content, baseFontSize]);
 
     const handleInput = useCallback(() => {
         if (editableRef.current) {
-            const bbcode = htmlToBbcode(editableRef.current.innerHTML, baseFontSize);
+            const sel = window.getSelection();
+            const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+            const { bbcode, cursorIndex } = htmlToBbcode(editableRef.current, baseFontSize, range);
             lastEmittedRef.current = bbcode;
-            onContentChange(bbcode);
+            onContentChange(bbcode, cursorIndex ?? undefined);
         }
     }, [onContentChange, baseFontSize]);
 
     const handlePaste = useCallback((e: React.ClipboardEvent) => {
         e.preventDefault();
-
-        // 1. Check for Images (e.g., Snipping Tool copies of equations)
         if (e.clipboardData.files && e.clipboardData.files.length > 0) {
             for (let i = 0; i < e.clipboardData.files.length; i++) {
                 const file = e.clipboardData.files[i];
@@ -193,6 +243,7 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                 '\\geq': '≥', '\\pm': '±', '\\times': '×', '\\div': '÷', '\\cdot': '⋅', '\\circ': '∘'
             };
             let result = text;
+            result = result.replace(/\\mathbf\{([^}]+)\}/g, '$1');
             for (const [latex, unicode] of Object.entries(symbols)) {
                 result = result.split(latex).join(unicode);
             }
@@ -202,13 +253,11 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
         if (html) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, "text/html");
-            ['script', 'style', 'meta', 'svg', 'iframe', 'form', 'img', 'noscript',
-             'link', 'object', 'applet', 'nav', 'footer', 'header', 'aside'].forEach(t => {
+            ['script', 'style', 'meta', 'svg', 'iframe', 'form', 'img', 'noscript', 'link', 'object', 'applet', 'nav', 'footer', 'header', 'aside'].forEach(t => {
                 doc.querySelectorAll(t).forEach(el => el.remove());
             });
 
-            const INLINE_TAGS = new Set(['span', 'a', 'b', 'strong', 'i', 'em', 'u', 's',
-                'strike', 'del', 'sup', 'sub', 'mark', 'code', 'small', 'abbr', 'cite', 'q']);
+            const INLINE_TAGS = new Set(['span', 'a', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'sup', 'sub', 'mark', 'code', 'small', 'abbr', 'cite', 'q']);
 
             const nodeToText = (node: Node): string => {
                 if (node.nodeType === Node.TEXT_NODE) {
@@ -223,16 +272,12 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                 const innerText = () => Array.from(el.childNodes).map(c => nodeToText(c)).join('');
 
                 if (tag === 'br') return '\n';
-
-                // Headings → sized + bold on their own line
                 if (tag.match(/^h[1-6]$/)) {
                     const level = parseInt(tag[1]);
                     const size = Math.max(16, Math.round(48 - ((level - 1) * 5)));
                     const text = innerText().trim();
                     return text ? `\n[size=${size}][b]${text}[/b][/size]\n` : '\n';
                 }
-
-                // List items → "• text" or "1. text" — no extra blank lines
                 if (tag === 'li') {
                     const isOrdered = el.closest('ol') !== null;
                     const idx = Array.from(el.parentNode?.children || []).indexOf(el) + 1;
@@ -240,8 +285,6 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                     const text = innerText().trim();
                     return text ? `\n${prefix}${text}` : '';
                 }
-
-                // ul/ol → items + one trailing newline
                 if (tag === 'ul' || tag === 'ol') {
                     const items = Array.from(el.childNodes).map(c => nodeToText(c)).join('');
                     return items + '\n';
@@ -297,7 +340,17 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                 .replace(/\n+$/, '');
 
             const insertHtml = bbcodeToHtml(bbcode, baseFontSize);
-            document.execCommand("insertHTML", false, insertHtml);
+
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                savedPasteSelectionRef.current = sel.getRangeAt(0).cloneRange();
+            }
+
+            if (insertHtml.includes('$')) {
+                setPendingPaste({ content: insertHtml, isHtml: true });
+            } else {
+                document.execCommand("insertHTML", false, insertHtml);
+            }
         } else if (plainText) {
             let normalizedText = plainText
                 .replace(/\r\n/g, '\n')
@@ -305,11 +358,77 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                 .replace(/[\t ]+$/gm, '')
                 .replace(/[\u200B-\u200D\uFEFF]/g, '');
             normalizedText = convertMathSymbols(normalizedText);
-            document.execCommand("insertText", false, normalizedText);
+
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                savedPasteSelectionRef.current = sel.getRangeAt(0).cloneRange();
+            }
+
+            if (normalizedText.includes('$')) {
+                setPendingPaste({ content: normalizedText, isHtml: false });
+            } else {
+                document.execCommand("insertText", false, normalizedText);
+            }
         }
     }, []);
 
+    const executePaste = useCallback((removeDollars: boolean) => {
+        if (!pendingPaste || !editableRef.current) return;
+
+        editableRef.current.focus();
+        const sel = window.getSelection();
+        if (sel && savedPasteSelectionRef.current) {
+            sel.removeAllRanges();
+            sel.addRange(savedPasteSelectionRef.current);
+        }
+
+        let finalContent = pendingPaste.content;
+        if (removeDollars) {
+            finalContent = finalContent.replace(/\$/g, '');
+        }
+
+        if (pendingPaste.isHtml) {
+            document.execCommand("insertHTML", false, finalContent);
+        } else {
+            document.execCommand("insertText", false, finalContent);
+        }
+
+        editableRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+        setPendingPaste(null);
+        savedPasteSelectionRef.current = null;
+    }, [pendingPaste]);
+
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (e.key === "Enter") {
+            // Reset text alignment for the new line by targeting the new block element
+            setTimeout(() => {
+                const sel = window.getSelection();
+                if (!sel || sel.rangeCount === 0) return;
+                let node = sel.anchorNode;
+                if (!node) return;
+                if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+
+                let block = node as HTMLElement;
+                while (block && block !== editableRef.current) {
+                    const tag = block.tagName.toLowerCase();
+                    if (tag === 'div' || tag === 'p' || tag === 'h1' || tag === 'h2') {
+                        break;
+                    }
+                    block = block.parentElement as HTMLElement;
+                }
+
+                if (block && block !== editableRef.current) {
+                    if (block.style.textAlign === 'center' || block.style.textAlign === 'right' || block.getAttribute('align')) {
+                        block.style.textAlign = '';
+                        block.removeAttribute('align');
+                        if (editableRef.current) {
+                            editableRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+                        }
+                    }
+                }
+            }, 0);
+        }
+
         if (!onFormatText) return;
 
         // Ctrl+Shift+> or Ctrl+Shift+.
@@ -361,37 +480,37 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
 
     const handleFind = () => {
         if (!findText || !editableRef.current) return;
-        
+
         let startIndex = 0;
         const sel = window.getSelection();
         const mapData = getEditorTextMapping();
         if (!mapData || mapData.mapping.length === 0) return;
         const { text, mapping } = mapData;
-        
+
         if (sel && sel.rangeCount > 0 && editableRef.current.contains(sel.anchorNode)) {
             const range = sel.getRangeAt(0);
             const index = mapping.findIndex(m => m.node === range.endContainer && m.offset === range.endOffset);
             if (index !== -1) startIndex = index;
         }
-        
+
         let matchIndex = text.toLowerCase().indexOf(findText.toLowerCase(), startIndex);
         if (matchIndex === -1 && startIndex > 0) {
             matchIndex = text.toLowerCase().indexOf(findText.toLowerCase(), 0);
         }
-        
+
         if (matchIndex !== -1) {
             const startMap = mapping[matchIndex];
-            const endMap = matchIndex + findText.length < mapping.length 
-                ? mapping[matchIndex + findText.length] 
-                : { node: mapping[mapping.length-1].node, offset: mapping[mapping.length-1].node.nodeValue!.length };
-            
+            const endMap = matchIndex + findText.length < mapping.length
+                ? mapping[matchIndex + findText.length]
+                : { node: mapping[mapping.length - 1].node, offset: mapping[mapping.length - 1].node.nodeValue!.length };
+
             const newRange = document.createRange();
             newRange.setStart(startMap.node, startMap.offset);
             newRange.setEnd(endMap.node, endMap.offset);
-            
+
             sel?.removeAllRanges();
             sel?.addRange(newRange);
-            
+
             if (startMap.node.parentElement) {
                 startMap.node.parentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
@@ -415,31 +534,31 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
         if (!findText || !editableRef.current) return;
         let count = 0;
         let mapData = getEditorTextMapping();
-        
+
         while (mapData && mapData.mapping.length > 0) {
             const { text, mapping } = mapData;
             const matchIndex = text.toLowerCase().indexOf(findText.toLowerCase());
             if (matchIndex === -1) break;
-            
+
             const startMap = mapping[matchIndex];
-            const endMap = matchIndex + findText.length < mapping.length 
-                ? mapping[matchIndex + findText.length] 
-                : { node: mapping[mapping.length-1].node, offset: mapping[mapping.length-1].node.nodeValue!.length };
-                
+            const endMap = matchIndex + findText.length < mapping.length
+                ? mapping[matchIndex + findText.length]
+                : { node: mapping[mapping.length - 1].node, offset: mapping[mapping.length - 1].node.nodeValue!.length };
+
             const newRange = document.createRange();
             newRange.setStart(startMap.node, startMap.offset);
             newRange.setEnd(endMap.node, endMap.offset);
-            
+
             const sel = window.getSelection();
             sel?.removeAllRanges();
             sel?.addRange(newRange);
-            
+
             document.execCommand("insertText", false, replaceText);
             count++;
-            
+
             mapData = getEditorTextMapping();
         }
-        
+
         if (count > 0) {
             editableRef.current.dispatchEvent(new Event("input", { bubbles: true }));
         }
@@ -502,6 +621,15 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                         <button onClick={handleReplace} className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-medium cursor-pointer">Replace</button>
                         <button onClick={handleReplaceAll} className="px-2 py-1 bg-zinc-800 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white rounded text-xs font-medium cursor-pointer">Replace All</button>
                     </div>
+                </div>
+            )}
+
+            {pendingPaste && (
+                <div className="fixed top-5 left-1/2 -translate-x-1/2 z-60 flex items-center gap-3 px-5 py-3 bg-white/95 border border-zinc-200 text-zinc-900 shadow-xl dark:bg-zinc-950/95 dark:border-zinc-800 dark:text-zinc-100 text-sm font-semibold tracking-wide rounded-full backdrop-blur-xl animate-in fade-in slide-in-from-top-4">
+                    <span>Remove $ symbols from pasted text?</span>
+                    <div className="w-px h-4 bg-zinc-300 dark:bg-zinc-700 mx-1" />
+                    <button onClick={() => executePaste(true)} className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors cursor-pointer text-xs">Yes</button>
+                    <button onClick={() => executePaste(false)} className="px-3 py-1 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-lg transition-colors cursor-pointer text-xs">No</button>
                 </div>
             )}
         </div>

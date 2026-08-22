@@ -86,13 +86,17 @@ export function useEditorLogic() {
     return () => { cancelAnimationFrame(renderId); };
   }, [activePage, doc.globalSettings, globalTextContent, activePageIndex, uiState.lastEditIndex, doc.pages.length, dispatch, setUiState, fontFamily]);
 
-  const handleContentChange = (newContent: string) => {
+  const handleContentChange = (newContent: string, cursorIndex?: number) => {
     if (!globalTextElement) return;
     if (newContent === globalTextContent) return;
 
     let diffIndex = 0;
-    while (diffIndex < globalTextContent.length && diffIndex < newContent.length && globalTextContent[diffIndex] === newContent[diffIndex]) {
-      diffIndex++;
+    if (cursorIndex !== undefined) {
+      diffIndex = cursorIndex;
+    } else {
+      while (diffIndex < globalTextContent.length && diffIndex < newContent.length && globalTextContent[diffIndex] === newContent[diffIndex]) {
+        diffIndex++;
+      }
     }
     setUiState(s => ({ ...s, lastEditIndex: diffIndex }));
 

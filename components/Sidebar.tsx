@@ -10,7 +10,7 @@ import type { GlobalSettings, RealismSettings } from "@/lib/types";
 
 interface SidebarProps {
     content: string;
-    onContentChange: (content: string) => void;
+    onContentChange: (content: string, cursorIndex?: number) => void;
     onAddImage?: (src: string, width: number, height: number) => void;
     settings: GlobalSettings;
     onUpdateSettings: (settings: Partial<GlobalSettings>) => void;

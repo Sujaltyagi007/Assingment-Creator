@@ -72,11 +72,13 @@ export function useCanvasInteraction(canvasRef: React.RefObject<HTMLCanvasElemen
       const x = (e.clientX - rect.left) * scaleX;
       const y = (e.clientY - rect.top) * scaleY;
       let hoveringType: "none" | "grab" | "resize" = "none";
+      let hId: string | null = null;
 
       for (let i = activePage.elements.length - 1; i >= 0; i--) {
         const el = activePage.elements[i];
         if (el.type === "image") {
           if (x >= el.x && x <= el.x + el.width && y >= el.y && y <= el.y + el.height) {
+            hId = el.id;
             if (x >= el.x + el.width - 20 && y >= el.y + el.height - 20) { hoveringType = "resize"; }
             else { hoveringType = "grab"; }
             break;
@@ -84,6 +86,10 @@ export function useCanvasInteraction(canvasRef: React.RefObject<HTMLCanvasElemen
         }
       }
       canvas.style.cursor = hoveringType === "resize" ? "nwse-resize" : hoveringType === "grab" ? "grab" : "default";
+      
+      if (interactionRef.current.selectedImageId !== hId) {
+        setInteraction(s => ({ ...s, selectedImageId: hId }));
+      }
       return;
     }
 
