@@ -209,9 +209,7 @@ function drawScannerEffect(ctx: CanvasRenderingContext2D, settings: GlobalSettin
   ctx.restore();
 }
 
-export function renderPageToCanvas(canvas: HTMLCanvasElement, page: Page, settings: GlobalSettings,
-  fontFamily: string, globalTextContent: string = "", pageIndex: number = 0, targetSrcIndex?: number | null,
-  scale: number = 1): { maxRequiredPages: number, targetPageIndex?: number } {
+export function renderPageToCanvas(canvas: HTMLCanvasElement, page: Page, settings: GlobalSettings, fontFamily: string, globalTextContent: string = "", pageIndex: number = 0, targetSrcIndex?: number | null, scale: number = 1): { maxRequiredPages: number, targetPageIndex?: number } {
   canvas.width = Math.round(PAGE_WIDTH_PX * scale); canvas.height = Math.round(PAGE_HEIGHT_PX * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) return { maxRequiredPages: 1 };
