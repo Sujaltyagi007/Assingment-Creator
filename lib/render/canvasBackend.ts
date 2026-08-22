@@ -12,9 +12,6 @@ interface CacheEntry {
   canvas: HTMLCanvasElement;
 }
 const textCache = new Map<number, CacheEntry>();
-
-// Layout covers the whole document, so every page (main canvas + each
-// thumbnail) shares one computation per content/settings change.
 let layoutMemo: { key: string; lines: LayoutLine[] } | null = null;
 
 export function getPageTextRange(pageIndex: number): { start: number, end: number } | null {
@@ -22,15 +19,15 @@ export function getPageTextRange(pageIndex: number): { start: number, end: numbe
   const lines = layoutMemo.lines;
   const pageLines = lines.filter(l => l.pageIndex === pageIndex);
   if (pageLines.length === 0) return null;
-  
+
   let start = 0;
   if (pageIndex > 0) {
     const prevPageLines = lines.filter(l => l.pageIndex === pageIndex - 1);
     if (prevPageLines.length > 0 && prevPageLines[prevPageLines.length - 1].glyphs.length > 0) {
-       const lastGlyph = prevPageLines[prevPageLines.length - 1].glyphs.slice(-1)[0];
-       start = lastGlyph.srcIndex + 1;
+      const lastGlyph = prevPageLines[prevPageLines.length - 1].glyphs.slice(-1)[0];
+      start = lastGlyph.srcIndex + 1;
     } else {
-       start = pageLines[0].glyphs[0]?.srcIndex ?? 0;
+      start = pageLines[0].glyphs[0]?.srcIndex ?? 0;
     }
   }
 
@@ -212,17 +209,9 @@ function drawScannerEffect(ctx: CanvasRenderingContext2D, settings: GlobalSettin
   ctx.restore();
 }
 
-export function renderPageToCanvas(
-  canvas: HTMLCanvasElement,
-  page: Page,
-  settings: GlobalSettings,
-  fontFamily: string,
-  globalTextContent: string = "",
-  pageIndex: number = 0,
-  targetSrcIndex?: number | null,
-  scale: number = 1,
-  isExport: boolean = false
-): { maxRequiredPages: number, targetPageIndex?: number } {
+export function renderPageToCanvas(canvas: HTMLCanvasElement, page: Page, settings: GlobalSettings,
+  fontFamily: string, globalTextContent: string = "", pageIndex: number = 0, targetSrcIndex?: number | null,
+  scale: number = 1): { maxRequiredPages: number, targetPageIndex?: number } {
   canvas.width = Math.round(PAGE_WIDTH_PX * scale); canvas.height = Math.round(PAGE_HEIGHT_PX * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) return { maxRequiredPages: 1 };
@@ -231,13 +220,7 @@ export function renderPageToCanvas(
   drawAntiCopyPattern(ctx, settings);
   drawWatermark(ctx, settings, fontFamily);
   drawHeaderFooter(ctx, settings, fontFamily, pageIndex);
-
   const margins = getMargins(settings.marginPreset);
-  const effectiveLeft = settings.leftMargin ?? 105;
-  const effectiveTop = settings.topMargin ?? 105;
-
-
-
   let lastMeasureFont = "";
   const measureChar = (ch: string, bold?: boolean, italic?: boolean, charFontSize?: number) => {
     const f = `${italic ? "italic " : ""}${bold ? "bold " : ""}${charFontSize || settings.fontSize}px ${fontFamily}`;
@@ -245,19 +228,12 @@ export function renderPageToCanvas(
     return ctx.measureText(ch).width;
   };
 
-
-
   for (const el of page.elements) {
     if (el.type === "image") {
       let img = imageCache.get(el.src);
-      if (!img) {
-        img = new Image();
-        img.src = el.src;
-        imageCache.set(el.src, img);
-      }
+      if (!img) { img = new Image(); img.src = el.src; imageCache.set(el.src, img); }
       const draw = () => {
-        ctx.save();
-        ctx.translate(el.x + el.width / 2, el.y + el.height / 2);
+        ctx.save(); ctx.translate(el.x + el.width / 2, el.y + el.height / 2);
         if (el.rotation) ctx.rotate((el.rotation * Math.PI) / 180);
         ctx.drawImage(img!, -el.width / 2, -el.height / 2, el.width, el.height);
         ctx.restore();
@@ -319,31 +295,101 @@ export function renderPageToCanvas(
         else if (/^(ans|answer|a|ans\d+)(\.|\:|\s)/i.test(lText)) lColor = "#2563eb";
       } else if (settings.autoHeadings && lText === lText.toUpperCase() && lText.length > 3) lColor = "#000000";
 
+      const drawHandwrittenLine = (sX: number, eX: number, yPos: number, size: number, color: string, isUnderline: boolean) => {
+        octx.strokeStyle = color;
+        octx.lineWidth = Math.max(1, size / 16);
+        octx.beginPath();
+        const targetY = yPos + (isUnderline ? size * 0.12 : -size * 0.28);
+        const length = eX - sX;
+        const lineSeed = settings.realism.seed + Math.floor(sX) + Math.floor(yPos);
+        const random = mulberry32(lineSeed);
+
+        const pressureJitter = Number(settings.realism.seed) <= 1 ? 0 : settings.realism.jitterY;
+        const startJitterY = (random() - 0.5) * pressureJitter * 2.5;
+        const endJitterY = (random() - 0.5) * pressureJitter * 2.5;
+
+        const step = 6;
+        let first = true;
+
+        for (let x = sX; x <= eX; x += step) {
+          const t = (x - sX) / (length || 1);
+          const baseDrift = startJitterY * (1 - t) + endJitterY * t;
+          const wiggle = Math.sin(t * Math.PI * 2.5) * (pressureJitter * 0.6) + (random() - 0.5) * (pressureJitter * 0.4);
+          const y = targetY + baseDrift + wiggle;
+          if (first) { octx.moveTo(x, y); first = false; } else { octx.lineTo(x, y); }
+        }
+        const finalY = targetY + endJitterY + (random() - 0.5) * (pressureJitter * 0.4);
+        octx.lineTo(eX, finalY);
+        octx.stroke();
+        lastColor = "";
+      };
+
       for (const g of line.glyphs) {
+        if (g.frac) {
+          const baseSize = g.fontSize || settings.fontSize;
+          const lineH = baseSize * settings.lineSpacing;
+          let numW = 0, denW = 0;
+          for (let i = 0; i < g.frac.num.length; i++) numW += measureChar(g.frac.num[i], g.bold, g.italic, baseSize);
+          for (let i = 0; i < g.frac.den.length; i++) denW += measureChar(g.frac.den[i], g.bold, g.italic, baseSize);
+          const maxW = Math.max(numW, denW) + 16;
+
+          const tcol = g.color || lColor;
+          if (tcol !== lastColor) { octx.fillStyle = octx.strokeStyle = tcol; lastColor = tcol; }
+          const barY = g.y + lineH / 2 - baseSize * 0.25;
+          drawHandwrittenLine(g.x + 2, g.x + maxW - 2, barY, baseSize * 0.8, tcol, true);
+
+          const tfnt = `${g.italic ? "italic " : ""}${g.bold ? "bold " : ""}${baseSize}px ${fontFamily}`;
+          if (tfnt !== lastFont) { octx.font = tfnt; lastFont = tfnt; }
+
+          const drawFracText = (text: string, startX: number, yPos: number) => {
+            let currX = startX;
+            for (let i = 0; i < text.length; i++) {
+              const ch = text[i];
+              const chSeed = settings.realism.seed + g.srcIndex + i + text.charCodeAt(0);
+              const random = mulberry32(chSeed);
+              const slantRad = (settings.realism.slant * Math.PI) / 180;
+              let tf = { dx: 0, dy: 0, rotation: 0, slant: slantRad, opacity: 1 - random() * settings.realism.pressureVariance };
+              if (Number(settings.realism.seed) > 1) {
+                tf.dx = (random() - 0.5) * 2 * settings.realism.jitterX;
+                tf.dy = (random() - 0.5) * 2 * settings.realism.jitterY;
+                tf.rotation = (random() - 0.5) * 2 * (Math.PI / 180) * 3;
+              }
+              octx.globalAlpha = tf.opacity;
+
+              octx.save();
+              octx.translate(currX + tf.dx, yPos + tf.dy);
+              if (tf.slant) octx.transform(1, 0, Math.tan(-tf.slant), 1, 0, 0);
+              if (tf.rotation) octx.rotate(tf.rotation);
+              octx.fillText(ch, 0, 0);
+              octx.restore();
+
+              currX += measureChar(ch, g.bold, g.italic, baseSize);
+            }
+          };
+
+          // Numerator baseline: on the current line (g.y)
+          const numStartX = g.x + (maxW - numW) / 2;
+          drawFracText(g.frac.num, numStartX, g.y);
+
+          // Denominator baseline: on the next line (g.y + lineH)
+          const denStartX = g.x + (maxW - denW) / 2;
+          drawFracText(g.frac.den, denStartX, g.y + lineH);
+
+          continue;
+        }
+
         const gseed = settings.realism.seed + g.srcIndex;
         const random = mulberry32(gseed);
         const slantRad = (settings.realism.slant * Math.PI) / 180;
         let tf;
         if (Number(settings.realism.seed) <= 1) {
-          tf = {
-            dx: 0,
-            dy: 0,
-            rotation: 0,
-            slant: slantRad,
-            opacity: 1 - random() * settings.realism.pressureVariance,
-          };
+          tf = { dx: 0, dy: 0, rotation: 0, slant: slantRad, opacity: 1 - random() * settings.realism.pressureVariance };
         } else {
           const dx = (random() - 0.5) * 2 * settings.realism.jitterX;
           const dy = (random() - 0.5) * 2 * settings.realism.jitterY;
           const rotationJitter = (random() - 0.5) * 2 * (Math.PI / 180) * 3;
           const opacity = 1 - random() * settings.realism.pressureVariance;
-          tf = {
-            dx,
-            dy,
-            rotation: rotationJitter,
-            slant: slantRad,
-            opacity,
-          };
+          tf = { dx, dy, rotation: rotationJitter, slant: slantRad, opacity };
         }
 
         octx.globalAlpha = tf.opacity;
@@ -353,11 +399,11 @@ export function renderPageToCanvas(
         if (tfnt !== lastFont) { octx.font = tfnt; lastFont = tfnt; }
         const tcol = g.color || lColor;
         if (tcol !== lastColor) { octx.fillStyle = octx.strokeStyle = tcol; lastColor = tcol; }
-        
+
         let yOffset = 0;
         if (g.sup) yOffset = -baseSize * 0.4;
         if (g.sub) yOffset = baseSize * 0.25;
-        
+
         octx.save();
         octx.translate(g.x + tf.dx, g.y + tf.dy + yOffset);
         if (tf.slant) octx.transform(1, 0, Math.tan(-tf.slant), 1, 0, 0);
@@ -366,62 +412,16 @@ export function renderPageToCanvas(
         octx.restore();
       }
 
-      const drawHandwrittenLine = (sX: number, eX: number, yPos: number, size: number, color: string, isUnderline: boolean) => {
-        octx.strokeStyle = color;
-        octx.lineWidth = Math.max(1, size / 16);
-        octx.beginPath();
-        
-        const targetY = yPos + (isUnderline ? size * 0.12 : -size * 0.28);
-        const length = eX - sX;
-        const lineSeed = settings.realism.seed + Math.floor(sX) + Math.floor(yPos);
-        const random = mulberry32(lineSeed);
-        
-        const pressureJitter = Number(settings.realism.seed) <= 1 ? 0 : settings.realism.jitterY;
-        const startJitterY = (random() - 0.5) * pressureJitter * 2.5;
-        const endJitterY = (random() - 0.5) * pressureJitter * 2.5;
-        
-        const step = 6;
-        let first = true;
-        
-        for (let x = sX; x <= eX; x += step) {
-          const t = (x - sX) / (length || 1);
-          const baseDrift = startJitterY * (1 - t) + endJitterY * t;
-          const wiggle = Math.sin(t * Math.PI * 2.5) * (pressureJitter * 0.6) + (random() - 0.5) * (pressureJitter * 0.4);
-          const y = targetY + baseDrift + wiggle;
-          
-          if (first) {
-            octx.moveTo(x, y);
-            first = false;
-          } else {
-            octx.lineTo(x, y);
-          }
-        }
-        
-        const finalY = targetY + endJitterY + (random() - 0.5) * (pressureJitter * 0.4);
-        octx.lineTo(eX, finalY);
-        octx.stroke();
-        lastColor = "";
-      };
-
-      // Draw continuous underlines
       let ulSX: number | null = null, ulEX = 0, ulY = 0, ulSize = settings.fontSize, ulColor = "";
       for (const g of line.glyphs) {
         const gSize = g.fontSize || settings.fontSize;
         const gColor = g.color || lColor;
         if (g.underline) {
-          if (ulSX === null) {
-            ulSX = g.x;
-            ulSize = gSize;
-            ulColor = gColor;
-            ulY = g.y;
-          }
+          if (ulSX === null) { ulSX = g.x; ulSize = gSize; ulColor = gColor; ulY = g.y; }
           ulEX = g.x + measureChar(g.char, g.bold, g.italic, g.fontSize);
           ulSize = Math.max(ulSize, gSize);
         } else {
-          if (ulSX !== null) {
-            drawHandwrittenLine(ulSX, ulEX, ulY, ulSize, ulColor, true);
-            ulSX = null;
-          }
+          if (ulSX !== null) { drawHandwrittenLine(ulSX, ulEX, ulY, ulSize, ulColor, true); ulSX = null; }
         }
       }
       if (ulSX !== null) drawHandwrittenLine(ulSX, ulEX, ulY, ulSize, ulColor, true);
@@ -431,12 +431,7 @@ export function renderPageToCanvas(
         const gSize = g.fontSize || settings.fontSize;
         const gColor = g.color || lColor;
         if (g.strikethrough) {
-          if (stSX === null) {
-            stSX = g.x;
-            stSize = gSize;
-            stColor = gColor;
-            stY = g.y;
-          }
+          if (stSX === null) { stSX = g.x; stSize = gSize; stColor = gColor; stY = g.y; }
           stEX = g.x + measureChar(g.char, g.bold, g.italic, g.fontSize);
           stSize = Math.max(stSize, gSize);
         } else {
@@ -455,23 +450,14 @@ export function renderPageToCanvas(
   const glyphsRep = pageLines.map(l => l.glyphs.map(g => `${g.char}_${Math.round(g.x)}_${Math.round(g.y)}_${g.fontSize ?? ''}_${g.bold ? 'b' : ''}_${g.italic ? 'i' : ''}_${g.underline ? 'u' : ''}_${g.highlight ? 'h' : ''}_${g.strikethrough ? 's' : ''}_${g.color ?? ''}`).join('|')).join('\n');
 
   const cacheKey = `${glyphsRep}_${pageIndex}_${fontFamily}_${settings.fontSize}_${settings.inkColor}_${settings.smartQA}_${settings.autoHeadings}_${settings.realism.seed}_${settings.realism.jitterX}_${settings.realism.jitterY}_${settings.realism.slant}_${settings.realism.pressureVariance}`;
-  
+
   let offscreenCanvas: HTMLCanvasElement | null = null;
   const cached = textCache.get(pageIndex);
-  if (cached && cached.key === cacheKey) {
-    offscreenCanvas = cached.canvas;
-  } else if (typeof window !== "undefined") {
-    offscreenCanvas = renderTextToOffscreen();
-    textCache.set(pageIndex, { key: cacheKey, canvas: offscreenCanvas });
-  }
-
-  if (offscreenCanvas) {
-    ctx.drawImage(offscreenCanvas, 0, 0);
-  }
-
+  if (cached && cached.key === cacheKey) { offscreenCanvas = cached.canvas; }
+  else if (typeof window !== "undefined") { offscreenCanvas = renderTextToOffscreen(); textCache.set(pageIndex, { key: cacheKey, canvas: offscreenCanvas }); }
+  if (offscreenCanvas) { ctx.drawImage(offscreenCanvas, 0, 0); }
   ctx.globalAlpha = 1.0;
   drawScannerEffect(ctx, settings);
-
   let targetPageIndex = undefined;
   if (targetSrcIndex !== undefined && targetSrcIndex !== null) {
     for (const line of lines) {
@@ -483,10 +469,7 @@ export function renderPageToCanvas(
       }
       if (targetPageIndex !== undefined) break;
     }
-    // No fallback: if no glyph matches (e.g. cursor past end of text after
-    // font-size reflow), return undefined so the active page is not changed.
   }
-
   return {
     maxRequiredPages: lines.length > 0 ? Math.max(...lines.map(l => l.pageIndex)) + 1 : 1,
     targetPageIndex

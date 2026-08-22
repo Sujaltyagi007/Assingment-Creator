@@ -30,6 +30,7 @@ export interface LayoutGlyph {
   fontSize?: number;
   sup?: boolean;
   sub?: boolean;
+  frac?: { num: string; den: string; };
 }
 
 export interface LayoutLine {
@@ -61,6 +62,7 @@ interface StyledChar {
   fontSize?: number;
   sup: boolean;
   sub: boolean;
+  frac?: { num: string; den: string; };
 }
 
 function parseStyledText(content: string): StyledChar[] {
@@ -68,7 +70,7 @@ function parseStyledText(content: string): StyledChar[] {
   let b = false, i = false, u = false, h = false, s = false, align: "left" | "center" | "right" = "left", sup = false, sub = false;
   const cStack: string[] = [];
   const sStack: number[] = [];
-  for (let idx = 0; idx < content.length; ) {
+  for (let idx = 0; idx < content.length;) {
     const srcIndex = idx;
     if (content[idx] === "[") {
       const cIdx = content.indexOf("]", idx);
@@ -100,6 +102,16 @@ function parseStyledText(content: string): StyledChar[] {
         if (t === "/size") { sStack.pop(); idx = n; continue; }
         if (t === "sub") { sub = true; idx = n; continue; }
         if (t === "/sub") { sub = false; idx = n; continue; }
+        if (t.startsWith("frac=")) {
+          const endFracIdx = content.indexOf("[/frac]", n);
+          if (endFracIdx !== -1) {
+            const num = t.substring(5);
+            const den = content.substring(n, endFracIdx);
+            chars.push({ char: "", srcIndex, bold: b, italic: i, underline: u, highlight: h, strikethrough: s, color: cStack[cStack.length - 1] || "", align, fontSize: sStack[sStack.length - 1], sup, sub, frac: { num, den } });
+            idx = endFracIdx + 7;
+            continue;
+          }
+        }
       }
     }
     chars.push({
@@ -124,7 +136,7 @@ const LIST_PREFIX_REGEX = /^\s*(\([a-zA-Z0-9ivxlcdmIVXLCDM]+\.?\)|\d{1,3}[\.\)]+
 
 export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
   let { content } = opts;
-  content = content.replace(/\r/g, ""); 
+  content = content.replace(/\r/g, "");
   content = content.replace(/\t/g, "    ");
 
   const { fontSize, lineSpacing, pageWidth, pageHeight, margins, measureChar, wordSpacing = 1.0 } = opts;
@@ -132,7 +144,17 @@ export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
   let curY = margins.top + fontSize + lineH, pageIdx = 0;
 
   const cache = new Map<string, number>();
-  const getW = (c: {char: string, bold?: boolean, italic?: boolean, fontSize?: number, sup?: boolean, sub?: boolean}) => {
+  const getW = (c: { char: string, bold?: boolean, italic?: boolean, fontSize?: number, sup?: boolean, sub?: boolean, frac?: { num: string, den: string } }) => {
+    if (c.frac) {
+      const k = `frac-${c.frac.num}-${c.frac.den}-${c.bold}-${c.italic}-${c.fontSize || fontSize}`;
+      if (!cache.has(k)) {
+        let numW = 0, denW = 0;
+        for (let i = 0; i < c.frac.num.length; i++) numW += measureChar(c.frac.num[i], c.bold, c.italic, c.fontSize || fontSize);
+        for (let i = 0; i < c.frac.den.length; i++) denW += measureChar(c.frac.den[i], c.bold, c.italic, c.fontSize || fontSize);
+        cache.set(k, Math.max(numW, denW) + 16);
+      }
+      return cache.get(k)!;
+    }
     const k = `${c.char}-${c.bold}-${c.italic}-${c.fontSize || fontSize}-${c.sup}-${c.sub}`;
     const effectiveFontSize = (c.sup || c.sub) ? (c.fontSize || fontSize) * 0.65 : (c.fontSize || fontSize);
     if (!cache.has(k)) cache.set(k, measureChar(c.char, c.bold, c.italic, effectiveFontSize) * (c.char === " " ? wordSpacing : 1));
@@ -145,17 +167,12 @@ export function layoutText(opts: TextLayoutOptions): LayoutLine[] {
       let targetStartX = 0;
       if (isCenter) targetStartX = (pageWidth - lineWidth) / 2;
       else if (isRight) targetStartX = pageWidth - margins.right - lineWidth;
-      
       const shiftX = targetStartX - line[0].x;
       line.forEach(g => g.x += shiftX);
     }
     lines.push({ glyphs: line, pageIndex: pageIdx });
-    const effectiveLineH = line.length > 0
-      ? Math.max(...line.map(g => {
-          const base = g.fontSize || fontSize;
-          return (g.sup || g.sub) ? base * 0.65 : base;
-        })) * lineSpacing
-      : lineH;
+    const hasFrac = line.some(g => g.frac);
+    const effectiveLineH = hasFrac ? lineH * 2 : lineH;
     if ((curY += effectiveLineH) > pageHeight - margins.bottom) { curY = margins.top + fontSize + lineH; pageIdx++; }
   };
 

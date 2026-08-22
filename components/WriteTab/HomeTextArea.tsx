@@ -49,6 +49,7 @@ function bbcodeToHtml(text: string, baseFontSize: number = 20): string {
         .replace(/\[\/s\]/g, "</s>")
         .replace(/\[sup\]/g, "<sup>").replace(/\[\/sup\]/g, "</sup>")
         .replace(/\[sub\]/g, "<sub>").replace(/\[\/sub\]/g, "</sub>")
+        .replace(/\[frac=([^\]]+)\]([\s\S]*?)\[\/frac\]/g, '<span class="math-frac" contenteditable="false" style="display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 4px; line-height: 1;"><span class="math-num" style="border-bottom: 1px solid currentColor; padding: 0 2px;">$1</span><span class="math-den" style="padding: 0 2px;">$2</span></span>')
         .replace(/\[size=([^\]]+)\]/g, (sizeStr) => {
             const canvasSize = parseInt(sizeStr, 10);
             const uiSize = Math.round(canvasSize * (14 / baseFontSize));
@@ -112,6 +113,18 @@ function htmlToBbcode(root: HTMLElement, baseFontSize: number = 20, selectionRan
 
             if (selectionRange && node === selectionRange.startContainer && selectionRange.startOffset === 0) {
                 foundCursorIndex = currentBbcodeLength;
+            }
+
+            if (el.classList.contains("math-frac")) {
+                const numEl = el.querySelector(".math-num");
+                const denEl = el.querySelector(".math-den");
+                if (numEl && denEl) {
+                    const numText = numEl.textContent || "";
+                    const denText = denEl.textContent || "";
+                    let finalGenerated = `[frac=${numText}]${denText}[/frac]`;
+                    currentBbcodeLength = textBeforeNode + finalGenerated.length;
+                    return finalGenerated;
+                }
             }
 
             let text = "";
@@ -210,7 +223,7 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
     const fileInputRef = useRef<HTMLInputElement>(null);
     const lastEmittedRef = useRef<string | null>(null);
     const savedPasteSelectionRef = useRef<Range | null>(null);
-    const [pendingPaste, setPendingPaste] = useState<{ content: string, isHtml: boolean } | null>(null);
+    const [pendingPaste, setPendingPaste] = useState<{ content: string, isHtml: boolean, queue: Array<'dollars' | 'frac' | 'power'> } | null>(null);
     useEffect(() => { lastEmittedRef.current = null; }, [baseFontSize]);
     useEffect(() => {
         if (editableRef.current && content !== lastEmittedRef.current) {
@@ -354,16 +367,19 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                 .replace(/^\n+/, '')
                 .replace(/\n+$/, '');
 
-            const insertHtml = bbcodeToHtml(bbcode, baseFontSize);
-
             const sel = window.getSelection();
             if (sel && sel.rangeCount > 0) {
                 savedPasteSelectionRef.current = sel.getRangeAt(0).cloneRange();
             }
 
-            if (insertHtml.includes('$')) {
-                setPendingPaste({ content: insertHtml, isHtml: true });
+            if (bbcode.includes('$') || bbcode.includes('\\frac') || /\^/.test(bbcode)) {
+                const queue: Array<'dollars' | 'frac' | 'power'> = [];
+                if (bbcode.includes('$')) queue.push('dollars');
+                if (bbcode.includes('\\frac')) queue.push('frac');
+                if (/\^/.test(bbcode)) queue.push('power');
+                setPendingPaste({ content: bbcode, isHtml: true, queue });
             } else {
+                const insertHtml = bbcodeToHtml(bbcode, baseFontSize);
                 document.execCommand("insertHTML", false, insertHtml);
             }
         } else if (plainText) {
@@ -379,17 +395,20 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
                 savedPasteSelectionRef.current = sel.getRangeAt(0).cloneRange();
             }
 
-            if (normalizedText.includes('$')) {
-                setPendingPaste({ content: normalizedText, isHtml: false });
+            if (normalizedText.includes('$') || normalizedText.includes('\\frac') || /\^/.test(normalizedText)) {
+                const queue: Array<'dollars' | 'frac' | 'power'> = [];
+                if (normalizedText.includes('$')) queue.push('dollars');
+                if (normalizedText.includes('\\frac')) queue.push('frac');
+                if (/\^/.test(normalizedText)) queue.push('power');
+                setPendingPaste({ content: normalizedText, isHtml: false, queue });
             } else {
                 document.execCommand("insertText", false, normalizedText);
             }
         }
     }, []);
 
-    const executePaste = useCallback((removeDollars: boolean) => {
-        if (!pendingPaste || !editableRef.current) return;
-
+    const executePasteFinal = useCallback((finalContent: string) => {
+        if (!editableRef.current) return;
         editableRef.current.focus();
         const sel = window.getSelection();
         if (sel && savedPasteSelectionRef.current) {
@@ -397,21 +416,43 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
             sel.addRange(savedPasteSelectionRef.current);
         }
 
-        let finalContent = pendingPaste.content;
-        if (removeDollars) {
-            finalContent = finalContent.replace(/\$/g, '');
-        }
-
-        if (pendingPaste.isHtml) {
-            document.execCommand("insertHTML", false, finalContent);
-        } else {
-            document.execCommand("insertText", false, finalContent);
-        }
+        document.execCommand("insertHTML", false, bbcodeToHtml(finalContent, baseFontSize));
 
         editableRef.current.dispatchEvent(new Event("input", { bubbles: true }));
-        setPendingPaste(null);
         savedPasteSelectionRef.current = null;
-    }, [pendingPaste]);
+    }, [baseFontSize]);
+
+    const handlePasteAction = useCallback((apply: boolean) => {
+        if (!pendingPaste) return;
+        
+        let newContent = pendingPaste.content;
+        const currentAction = pendingPaste.queue[0];
+        
+        if (apply) {
+            if (currentAction === 'dollars') {
+                newContent = newContent.replace(/\$/g, '');
+            } else if (currentAction === 'frac') {
+                newContent = newContent.replace(/\\frac\{((?:[^{}]*|\{[^{}]*\})*)\}\{((?:[^{}]*|\{[^{}]*\})*)\}/g, '[frac=$1]$2[/frac]');
+            } else if (currentAction === 'power') {
+                newContent = newContent.replace(/([\p{L}\p{N}_]+|\([^)]+\)|\[[^\]]+\])\^([\p{L}\p{N}_+-]+|\{(?:[^{}]*|\{[^{}]*\})*\})/gu, (match, base, exp) => {
+                    let cleanExp = exp;
+                    if (cleanExp.startsWith('{') && cleanExp.endsWith('}')) {
+                        cleanExp = cleanExp.slice(1, -1);
+                    }
+                    return `${base}[sup]${cleanExp}[/sup]`;
+                });
+            }
+        }
+        
+        const nextQueue = pendingPaste.queue.slice(1);
+        
+        if (nextQueue.length === 0) {
+            executePasteFinal(newContent);
+            setPendingPaste(null);
+        } else {
+            setPendingPaste({ ...pendingPaste, content: newContent, queue: nextQueue });
+        }
+    }, [pendingPaste, executePasteFinal]);
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (!onFormatText) return;
@@ -611,10 +652,14 @@ export const HomeTextArea = ({ content, onContentChange, autoCorrect, onSelectio
 
             {pendingPaste && (
                 <div className="fixed top-5 left-1/2 -translate-x-1/2 z-60 flex items-center gap-3 px-5 py-3 bg-white/95 border border-zinc-200 text-zinc-900 shadow-xl dark:bg-zinc-950/95 dark:border-zinc-800 dark:text-zinc-100 text-sm font-semibold tracking-wide rounded-full backdrop-blur-xl animate-in fade-in slide-in-from-top-4">
-                    <span>Remove $ symbols from pasted text?</span>
+                    <span>
+                        {pendingPaste.queue[0] === 'dollars' && "Remove $ symbols from pasted text?"}
+                        {pendingPaste.queue[0] === 'frac' && "Format \\frac{}{} as numerator/denominator?"}
+                        {pendingPaste.queue[0] === 'power' && "Format powers (e.g., n^2) as superscript?"}
+                    </span>
                     <div className="w-px h-4 bg-zinc-300 dark:bg-zinc-700 mx-1" />
-                    <button onClick={() => executePaste(true)} className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors cursor-pointer text-xs">Yes</button>
-                    <button onClick={() => executePaste(false)} className="px-3 py-1 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-lg transition-colors cursor-pointer text-xs">No</button>
+                    <button onClick={() => handlePasteAction(true)} className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors cursor-pointer text-xs">Yes</button>
+                    <button onClick={() => handlePasteAction(false)} className="px-3 py-1 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-lg transition-colors cursor-pointer text-xs">No</button>
                 </div>
             )}
         </div>
