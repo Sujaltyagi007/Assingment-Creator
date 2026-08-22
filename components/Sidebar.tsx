@@ -84,7 +84,7 @@ export default function Sidebar({ content, onContentChange, onAddImage, settings
                     <>
                         <WriteTab hasSelection={hasSelection} onFormatText={handleFormatText} activeFormats={activeFormats} />
                         <div className="flex-1 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] scrollbar-none">
-                            <HomeTextArea content={content} onContentChange={onContentChange} autoCorrect={settings.autoCorrect} onSelectionChange={handleSelectionChange} onAddImage={onAddImage} onFormatText={handleFormatText} baseFontSize={settings.fontSize} fontFamily={fontFamily} />
+                            <HomeTextArea content={content} onContentChange={onContentChange} autoCorrect={settings.autoCorrect} onSelectionChange={handleSelectionChange} onAddImage={onAddImage} onFormatText={handleFormatText} baseFontSize={settings.fontSize} />
                         </div>
                     </>
                 )}
